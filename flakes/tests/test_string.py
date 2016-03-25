@@ -9,6 +9,8 @@ class StringKernelTests(unittest.TestCase):
         self.s2 = 'gatta'
         self.k_slow = flakes.string.StringKernel(mode='slow')
         self.k_np = flakes.string.StringKernel(mode='numpy')
+        self.k_tf = flakes.string.StringKernel()
+        self.k_tf.alphabet = {'a': 0, 'c': 1, 'g': 2, 't': 3}
         
     def test_sk_slow_1(self):
         self.k_slow.order = 5
@@ -24,6 +26,22 @@ class StringKernelTests(unittest.TestCase):
         self.k_np.decay = 2.0
         expected = 504.0
         result = self.k_np.k(self.s1, self.s2)
+        self.assertAlmostEqual(result, expected)
+
+    def test_sk_tf_1(self):
+        self.k_tf.order = 5
+        self.k_tf.order_coefs = [1.] * 5
+        self.k_tf.decay = 2.0
+        expected = 504.0
+        result = self.k_tf.k(self.s1, self.s2)
+        self.assertAlmostEqual(result, expected)
+
+    def test_sk_tf_2(self):
+        self.k_tf.order = 5
+        self.k_tf.order_coefs = [1.] * 5
+        self.k_tf.decay = 0.8
+        expected = 504.0
+        result = self.k_tf.k(self.s1, self.s2)
         self.assertAlmostEqual(result, expected)
         
 
