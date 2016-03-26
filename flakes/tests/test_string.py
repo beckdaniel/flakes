@@ -40,7 +40,7 @@ class StringKernelTests(unittest.TestCase):
         self.k_tf.order = 5
         self.k_tf.order_coefs = [1.] * 5
         self.k_tf.decay = 0.8
-        expected = 504.0
+        expected = 5.943705
         result = self.k_tf.k(self.s1, self.s2)
         self.assertAlmostEqual(result, expected)
         
