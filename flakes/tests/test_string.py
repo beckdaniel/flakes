@@ -43,6 +43,18 @@ class StringKernelTests(unittest.TestCase):
         expected = 5.943705
         result = self.k_tf.k(self.s1, self.s2)
         self.assertAlmostEqual(result, expected)
+
+    def test_compare_1(self):
+        self.k_tf.order = 5
+        self.k_tf.order_coefs = [0.1, 0.2, 0.4, 0.5, 0.7]
+        self.k_tf.decay = 0.8
+        result1 = self.k_tf.k(self.s1, self.s2)
+
+        self.k_np.order = 5
+        self.k_np.order_coefs = [0.1, 0.2, 0.4, 0.5, 0.7]
+        self.k_np.decay = 0.8
+        result2 = self.k_np.k(self.s1, self.s2)
+        self.assertAlmostEqual(result1, result2)
         
 
 if __name__ == "__main__":

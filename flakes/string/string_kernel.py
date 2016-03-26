@@ -114,33 +114,33 @@ class StringKernel(object):
         m = len(s2)
         decay = self.decay
         order = self.order
-        sim = self.sim
 
         # We create a Graph for the calculation
         graph = tf.Graph()
         with graph.as_default():
 
-
-
-            # Store sim(j, k) values
+            # Strings will be represented as matrices of
+            # embeddings and the similarity is just
+            # the dot product. Hard match is replicated
+            # by using one-hot embeddings.
             mat1 = tf.placeholder("float", [None, n])
             mat2 = tf.placeholder("float", [None, m])
             S = tf.matmul(tf.transpose(mat1), mat2)
-            #S = tf.Print(S, [S], message="S value:", summarize=20)
-        
-            # Triangular matrix over decay powers
+
+            # Initilazing auxiliary variables.
+            # The zero vectors are used for padding.
+            decay_sq = decay * decay
+            n_zeros = tf.constant(np.zeros(shape=(1, n-1)), dtype=tf.float32)
+            m_zeros = tf.constant(np.zeros(shape=(1, m)), dtype=tf.float32)
+
+            # Triangular matrices over decay powers.
             max_len = np.max([n, m])
             npd = np.zeros((max_len, max_len))
             i1, i2 = np.indices(npd.shape)
             for k in xrange(max_len):
                 npd[i2-k == i1] = decay ** k
-            D1 = tf.constant(npd[:n, :n], dtype=tf.float32)
-            D2 = tf.constant(npd[:m, :m], dtype=tf.float32)
-
-            # Initilazing auxiliary variables
-            decay_sq = decay * decay
-            n_zeros = tf.constant(np.zeros(shape=(1, n-1)), dtype=tf.float32)
-            m_zeros = tf.constant(np.zeros(shape=(1, m)), dtype=tf.float32)
+            D1 = tf.constant(npd[1:n, 1:n], dtype=tf.float32)
+            D2 = tf.constant(npd[1:m, 1:m], dtype=tf.float32)
 
             # Initialize Kp
             ones = tf.ones(shape=(1, n, m))
@@ -152,57 +152,39 @@ class StringKernel(object):
             acc_Kp = taops.TensorArray(dtype=initial_Kp.dtype, size=order+1,
                                    tensor_array_name="ret_Kp")
 
-            #######################
-
+            # Main loop. We use a tensorflow While here.
             i = tf.constant(0)
             a = Kp.read(0)
             acc_Kp = acc_Kp.write(0, a)
+
             def _update_Kp(acc_Kp, a, S, i):
                 aux1 = tf.mul(S, a[:n-1, :m-1])
-                aux2 = tf.transpose(tf.matmul(aux1, D2[1:, 1:]) * decay_sq)
+                aux2 = tf.transpose(tf.matmul(aux1, D2) * decay_sq)
                 aux3 = tf.concat(0, [n_zeros, aux2])
-                aux4 = tf.transpose(tf.matmul(aux3, D1[1:, 1:]))
+                aux4 = tf.transpose(tf.matmul(aux3, D1))
                 a = tf.concat(0, [m_zeros, aux4])
                 i += 1
                 acc_Kp = acc_Kp.write(i, a)
-                return [acc_Kp, a, S, i]#, t_order]
+                return [acc_Kp, a, S, i]
 
             cond = lambda _1, _2, _3, i: i < order
             loop_vars = [acc_Kp, a, S[:n-1, :m-1], i]
-            final_Kp, _, _, _ = cfops.While(cond=cond, body=_update_Kp, loop_vars=loop_vars)
+            final_Kp, _, _, _ = cfops.While(cond=cond, body=_update_Kp, 
+                                            loop_vars=loop_vars)
             final_Kp = final_Kp.pack()
 
-            #for i in xrange(order):
-            #    aux1 = tf.mul(S[:n-1, :m-1], Kp[i, :n-1, :m-1])
-            #    #aux1 = tf.Print(aux1, [aux1], message="aux1 value:", summarize=20)
-            #    aux2 = tf.transpose(tf.matmul(aux1, D2[1:, 1:]) * decay_sq)
-            #    aux3 = tf.concat(0, [n_zeros, aux2])
-            #    aux4 = tf.transpose(tf.matmul(aux3, D1[1:, 1:]))
-            #    aux5 = tf.concat(0, [m_zeros, aux4])
-            #    tf.scatter_update(Kp, i + 1, aux5)
-            #    #tf.Print(Kp, [Kp], message="Kp value:", summarize=20)
-        
-            ######################
-
-            # Final calculation
+            # Final calculation. "result" contains the final kernel value.
             mul1 = S * final_Kp[:order, :, :]
             sum1 = tf.reduce_sum(mul1, 1)
             Ki = tf.reduce_sum(sum1, 1, keep_dims=True) * decay_sq
-            #Ki = tf.Print(Ki, [Ki], message="Ki value:", summarize=20)
-
-            # Obtain the final result
             coefs = tf.convert_to_tensor([self.order_coefs])
             result = tf.matmul(coefs, Ki)
 
-            init_op = tf.initialize_all_variables()
-
-        # Now we have to build the input tensors
+        # Now we built the input matrices and run the session
+        # over the built graph.
         t1 = self._build_symbol_tensor(s1)
         t2 = self._build_symbol_tensor(s2)
-        #print t1.T.dot(t2)
-
         with tf.Session(graph=graph) as sess:
-            sess.run(init_op)
             output = sess.run(result, feed_dict={mat1: t1, mat2: t2})
 
         return output
@@ -217,7 +199,5 @@ class StringKernel(object):
         t = np.zeros(shape=(len(s), dim))
         for i, ch in enumerate(s):
             t[i, self.alphabet[ch]] = 1.0
-        #print s
-        #print t.T
         return t.T
        
