@@ -70,16 +70,11 @@ class StringKernel(object):
         sim = self.sim
         coefs = self.order_coefs
 
-        Kp = np.zeros(shape=(order + 1, n, m))
-        Kp[0,:,:] = 1.0
-        result = 0.0
-
         # Store sim(j, k) values
         S = np.zeros(shape=(n, m))
         for j in xrange(n):
             for k in xrange(m):
                 S[j,k] = sim(s1[j], s2[k])
-        #print S
         
         # Triangular matrix over decay powers
         max_len = max(n, m)
@@ -87,9 +82,10 @@ class StringKernel(object):
         d1, d2 = np.indices(D.shape)
         for k in xrange(max_len):
             D[d2-k == d1] = decay ** k
-        #print D
 
         # Initializing auxiliary variables
+        Kp = np.zeros(shape=(order + 1, n, m))
+        Kp[0,:,:] = 1.0
         Kpp = np.zeros(shape=(order, n, m))
         decay_sq = decay * decay
 
@@ -97,18 +93,15 @@ class StringKernel(object):
             Kpp[i, :-1, 1:] = decay_sq * (S[:-1,:-1] * Kp[i,:-1,:-1]).dot(D[1:m, 1:m])
             Kp[i + 1, 1:] = Kpp[i, :-1].T.dot(D[1:n, 1:n]).T
         
-        #print Kp
         # Final calculation
         Ki = np.sum(np.sum(S * Kp[:-1], axis=1), axis=1) * decay_sq
-        #Ki = np.sum(S * np.sum(Kp, axis=0), axis=0) * decay_sq
-        #print Ki
-
         return Ki.dot(coefs)
 
     def _k_tf(self, s1, s2):
         """
         Calculates k over two strings. Inputs can be strings or lists.
-        This is a vectorized version using numpy.
+        This is a Tensorflow version which builds a graph and run a session
+        on its own.
         """
         n = len(s1)
         m = len(s2)
