@@ -1,5 +1,6 @@
 import flakes
 import unittest
+import numpy as np
 
 
 class StringKernelTests(unittest.TestCase):
@@ -83,6 +84,7 @@ class StringKernelTests(unittest.TestCase):
         self.assertAlmostEqual(result1, result2, places=2)
         
 
+@unittest.skip('profiling')
 class StringKernelProfiling(unittest.TestCase):
 
     def setUp(self):
@@ -94,23 +96,17 @@ class StringKernelProfiling(unittest.TestCase):
         self.k_tf.alphabet = {elem: i for i, elem in enumerate(list(set(self.s1 + self.s2)))}
 
     def test_prof_1(self):
-        self.k_tf.order = 8
-        self.k_tf.order_coefs = [0.1, 0.2, 0.4, 0.5, 0.7, 1, 1, 1]
+        self.k_tf.order = 40
+        self.k_tf.order_coefs = [0.1, 0.2, 0.4, 0.5, 0.7, 1, 1, 1, 1, 1] + ([0.5] * 30)
         self.k_tf.decay = 0.8
         result1 = self.k_tf.k(self.s1, self.s2)
         print result1
 
-        self.k_np.order = 8
-        self.k_np.order_coefs = [0.1, 0.2, 0.4, 0.5, 0.7, 1, 1, 1]
+        self.k_np.order = 40
+        self.k_np.order_coefs = [0.1, 0.2, 0.4, 0.5, 0.7, 1, 1, 1, 1, 1] + ([0.5] * 30)
         self.k_np.decay = 0.8
         result2 = self.k_np.k(self.s1, self.s2)
         print result2
-        
-        self.k_slow.order = 8
-        self.k_slow.order_coefs = [0.1, 0.2, 0.4, 0.5, 0.7, 1, 1, 1]
-        self.k_slow.decay = 0.8
-        result3 = self.k_slow.k(self.s1, self.s2)
-        print result3
 
     def test_prof_2(self):
         self.k_tf.order = 8
@@ -124,12 +120,21 @@ class StringKernelProfiling(unittest.TestCase):
         self.k_np.decay = 0.8
         result2 = self.k_np.k(self.s1, self.s1)
         print result2
-        
-        self.k_slow.order = 8
-        self.k_slow.order_coefs = [0.1, 0.2, 0.4, 0.5, 0.7, 1, 1, 1]
-        self.k_slow.decay = 0.8
-        result3 = self.k_slow.k(self.s1, self.s1)
-        print result3
+
+    @unittest.skip('profiling')
+    def test_prof_3(self):
+        data = np.loadtxt('flakes/tests/trial2', dtype=object, delimiter='\t')[:10]
+        inputs = data[:, 1:]
+        self.k_tf.order = 30
+        self.k_tf.order_coefs = [0.1, 0.7, 0.5, 0.3, 0.1] + ([0.1] * 25)
+        self.k_tf.decay = 0.1
+        alphabet = list(set(''.join(inputs.flatten())))
+        self.k_tf.alphabet = {elem: i for i, elem in enumerate(alphabet)}
+        result = self.k_tf.K(inputs)
+        print inputs
+        print result
+
+
 
 if __name__ == "__main__":
     unittest.main()

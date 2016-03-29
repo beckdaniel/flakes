@@ -182,7 +182,6 @@ class StringKernel(object):
 
         return output
 
-
     def _build_symbol_tensor(self, s):
         """
         Transform an input (string or list) into a
@@ -194,3 +193,21 @@ class StringKernel(object):
             t[i, self.alphabet[ch]] = 1.0
         return t.T
        
+    def K(self, X, X2=None):
+        """
+        Calculate the Gram matrix over two lists of strings.
+        """
+        if X2 is None:
+            X2 = X
+            symm = True
+        else:
+            symm = False
+        result = np.zeros(shape=(len(X), len(X2)))
+        for i, x1 in enumerate(X):
+            for j, x2 in enumerate(X2):
+                if symm and (j < i):
+                    result[i, j] = result[j, i]
+                else:
+                    result[i, j] = self.k(x1[0], x2[0])
+                #result[i, j] = self.k(x1[0], x2[0])
+        return result
