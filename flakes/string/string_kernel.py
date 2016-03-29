@@ -25,6 +25,7 @@ class StringKernel(object):
         # Select similarity metric
         if sim == 'hard':
             self.sim = sims.hard_match
+        self.graph = None
 
     def _k_slow(self, s1, s2):
         """
@@ -103,22 +104,36 @@ class StringKernel(object):
         This is a Tensorflow version which builds a graph and run a session
         on its own.
         """
-        n = len(s1)
-        m = len(s2)
+        if not self.graph:
+            self.maxlen = max(len(s1), len(s2))
+            self._build_graph()
+
+        # Now we built the input matrices and run the session
+        # over the built graph.
+        t1 = self._build_symbol_tensor(s1)
+        t2 = self._build_symbol_tensor(s2)
+        with tf.Session(graph=self.graph) as sess:
+            output = sess.run(self.result, feed_dict={self.mat1: t1, self.mat2: t2})
+
+        return output
+
+    def _build_graph(self):
+        n = self.maxlen
+        m = self.maxlen
         decay = self.decay
         order = self.order
 
         # We create a Graph for the calculation
-        graph = tf.Graph()
-        with graph.as_default():
+        self.graph = tf.Graph()
+        with self.graph.as_default():
 
             # Strings will be represented as matrices of
             # embeddings and the similarity is just
             # the dot product. Hard match is replicated
             # by using one-hot embeddings.
-            mat1 = tf.placeholder("float", [None, n])
-            mat2 = tf.placeholder("float", [None, m])
-            S = tf.matmul(tf.transpose(mat1), mat2)
+            self.mat1 = tf.placeholder("float", [None, n])
+            self.mat2 = tf.placeholder("float", [None, m])
+            S = tf.matmul(tf.transpose(self.mat1), self.mat2)
 
             # Initilazing auxiliary variables.
             # The zero vectors are used for padding.
@@ -171,16 +186,7 @@ class StringKernel(object):
             sum1 = tf.reduce_sum(mul1, 1)
             Ki = tf.reduce_sum(sum1, 1, keep_dims=True) * decay_sq
             coefs = tf.convert_to_tensor([self.order_coefs])
-            result = tf.matmul(coefs, Ki)
-
-        # Now we built the input matrices and run the session
-        # over the built graph.
-        t1 = self._build_symbol_tensor(s1)
-        t2 = self._build_symbol_tensor(s2)
-        with tf.Session(graph=graph) as sess:
-            output = sess.run(result, feed_dict={mat1: t1, mat2: t2})
-
-        return output
+            self.result = tf.matmul(coefs, Ki)
 
     def _build_symbol_tensor(self, s):
         """
@@ -188,7 +194,7 @@ class StringKernel(object):
         numpy matrix.
         """
         dim = len(self.alphabet)
-        t = np.zeros(shape=(len(s), dim))
+        t = np.zeros(shape=(self.maxlen, dim))
         for i, ch in enumerate(s):
             t[i, self.alphabet[ch]] = 1.0
         return t.T

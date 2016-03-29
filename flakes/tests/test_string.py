@@ -1,6 +1,7 @@
 import flakes
 import unittest
 import numpy as np
+import GPy
 
 
 class StringKernelTests(unittest.TestCase):
@@ -137,8 +138,9 @@ class StringKernelProfiling(unittest.TestCase):
 
 class GPyTests(unittest.TestCase):
     
+    @unittest.skip('profiling')
     def test_gpy_1(self):
-        data = np.loadtxt('flakes/tests/trial2', dtype=object, delimiter='\t')[:5]
+        data = np.loadtxt('flakes/tests/trial2', dtype=object, delimiter='\t')[:2]
         inputs = data[:, 1:]
         k = flakes.wrappers.gpy.GPyStringKernel()
         k.order = 30
@@ -147,7 +149,26 @@ class GPyTests(unittest.TestCase):
         alphabet = list(set(''.join(inputs.flatten())))
         k.alphabet = {elem: i for i, elem in enumerate(alphabet)}
         result = k.K(inputs)
-        print inputs
+        print result
+
+    @unittest.skip('profiling')
+    def test_gpy_2(self):
+        data = np.loadtxt('flakes/tests/trial2', dtype=object, delimiter='\t')[:2]
+        inputs = data[:, 1:]
+        labels = data[:, :1]
+        k = flakes.wrappers.gpy.GPyStringKernel()
+        k.order = 30
+        k.order_coefs = [0.1, 0.7, 0.5, 0.3, 0.1] + ([0.1] * 25)
+        k.decay = 0.1
+        alphabet = list(set(''.join(inputs.flatten())))
+        k.alphabet = {elem: i for i, elem in enumerate(alphabet)}
+
+        m = GPy.models.GPRegression(inputs, labels, kernel=k)
+        print labels
+        print m
+        m.optimize(messages=True, max_iters=10)
+        print m
+        result = m.predict(inputs)
         print result
 
 if __name__ == "__main__":
