@@ -3,6 +3,7 @@ import numpy as np
 import flakes.util.similarities as sims
 from tensorflow.python.ops import control_flow_ops as cfops
 from tensorflow.python.ops import tensor_array_ops as taops
+from memory_profiler import profile
 
 
 class StringKernel(object):
@@ -26,6 +27,11 @@ class StringKernel(object):
         if sim == 'hard':
             self.sim = sims.hard_match
         self.graph = None
+
+    #def _tf_init(self, maxlen):
+    #    self.maxlen = maxlen
+    #    self._build_graph()
+    #    self.session = tf.Session(graph=self.graph)
 
     def _k_slow(self, s1, s2):
         """
@@ -110,14 +116,19 @@ class StringKernel(object):
 
         # Now we built the input matrices and run the session
         # over the built graph.
-        t1 = self._build_symbol_tensor(s1)
-        t2 = self._build_symbol_tensor(s2)
+        #import ipdb; ipdb.set_trace()
+        if not isinstance(s1, np.ndarray):
+            s1 = self._build_symbol_tensor(s1)
+        if not isinstance(s2, np.ndarray):
+            s2 = self._build_symbol_tensor(s2)
         with tf.Session(graph=self.graph) as sess:
-            output = sess.run(self.result, feed_dict={self.mat1: t1, self.mat2: t2})
+            output = sess.run(self.result, feed_dict={self.mat1: s1, self.mat2: s2})
+        #output = self.session.run(self.result, feed_dict={self.mat1: s1, self.mat2: s2})
 
         return output
 
     def _build_graph(self):
+        print "BUILD GRAPH"
         n = self.maxlen
         m = self.maxlen
         decay = self.decay
@@ -151,42 +162,32 @@ class StringKernel(object):
             D2 = tf.constant(npd[1:m, 1:m], dtype=tf.float32)
 
             # Initialize Kp
-            ones = tf.ones(shape=(1, n, m))
-            zeros = tf.zeros(shape=(order, n, m))
-            initial_Kp = tf.concat(0, [ones, zeros])
-            Kp = taops.TensorArray(dtype=initial_Kp.dtype, size=order+1,
-                                   tensor_array_name="Kp")
-            Kp = Kp.unpack(initial_Kp)
-            acc_Kp = taops.TensorArray(dtype=initial_Kp.dtype, size=order+1,
-                                   tensor_array_name="ret_Kp")
-
-            # Main loop. We use a tensorflow While here.
-            i = tf.constant(0)
-            a = Kp.read(0)
-            acc_Kp = acc_Kp.write(0, a)
-
-            def _update_Kp(acc_Kp, a, S, i):
-                aux1 = tf.mul(S, a[:n-1, :m-1])
+            # We know the shape of Kp before building the graph
+            # so we can use a "static" list of Ops here.
+            # A more elegant solution would involve some scan-like
+            # Op but this seems to have some memory leaks in
+            # TF 0.7.1
+            Kp = []
+            Kp.append(tf.ones(shape=(n, m)))
+            for i in xrange(1, order):
+                aux1 = tf.mul(S[:n-1, :m-1], Kp[i-1][:n-1, :m-1])
                 aux2 = tf.transpose(tf.matmul(aux1, D2) * decay_sq)
                 aux3 = tf.concat(0, [n_zeros, aux2])
                 aux4 = tf.transpose(tf.matmul(aux3, D1))
-                a = tf.concat(0, [m_zeros, aux4])
-                i += 1
-                acc_Kp = acc_Kp.write(i, a)
-                return [acc_Kp, a, S, i]
+                Kp.append(tf.concat(0, [m_zeros, aux4]))
 
-            cond = lambda _1, _2, _3, i: i < order
-            loop_vars = [acc_Kp, a, S[:n-1, :m-1], i]
-            final_Kp, _, _, _ = cfops.While(cond=cond, body=_update_Kp, 
-                                            loop_vars=loop_vars)
-            final_Kp = final_Kp.pack()
 
             # Final calculation. "result" contains the final kernel value.
-            mul1 = S * final_Kp[:order, :, :]
-            sum1 = tf.reduce_sum(mul1, 1)
-            Ki = tf.reduce_sum(sum1, 1, keep_dims=True) * decay_sq
-            coefs = tf.convert_to_tensor([self.order_coefs])
-            self.result = tf.matmul(coefs, Ki)
+            # Because our Kps are in a list we can't use vectorization
+            # over "i" anymore... Oh well...
+            results = []
+            for i in xrange(order):
+                coef = self.order_coefs[i]
+                aux5 = S * decay_sq
+                aux6 = tf.mul(aux5, Kp[i])
+                aux7 = tf.reduce_sum(aux6)
+                results.append(coef * aux7)
+            self.result = tf.add_n(results)
 
     def _build_symbol_tensor(self, s):
         """
@@ -199,4 +200,29 @@ class StringKernel(object):
             t[i, self.alphabet[ch]] = 1.0
         return t.T
        
+    def K(self, X, X2=None):
+        """
+        Calculate the Gram matrix over two lists of strings.
+        """
+        if X2 is not None:
+            self.maxlen = max([len(x[0]) for x in np.concatenate((X, X2))])
+        else:
+            self.maxlen = max([len(x[0]) for x in X])
+        if self.graph is None:
+            print self.graph
+            print "BUILDING GRAPH"
+            self._build_graph()
 
+        if X2 is None:
+            X2 = X
+            symm = True
+        else:
+            symm = False
+        result = np.zeros(shape=(len(X), len(X2)))
+        for i, x1 in enumerate(X):
+            for j, x2 in enumerate(X2):
+                if symm and (j < i):
+                    result[i, j] = result[j, i]
+                else:
+                    result[i, j] = self.k(x1[0], x2[0])
+        return result

@@ -46,7 +46,7 @@ class StringKernelTests(unittest.TestCase):
         self.k_tf.decay = 0.8
         expected = 5.943705
         result = self.k_tf.k(self.s1, self.s2)
-        self.assertAlmostEqual(result, expected)
+        self.assertAlmostEqual(result, expected, places=4)
 
     def test_compare_1(self):
         self.k_tf.order = 5
@@ -85,7 +85,7 @@ class StringKernelTests(unittest.TestCase):
         self.assertAlmostEqual(result1, result2, places=2)
         
 
-@unittest.skip('profiling')
+#@unittest.skip('profiling')
 class StringKernelProfiling(unittest.TestCase):
 
     def setUp(self):
@@ -122,18 +122,38 @@ class StringKernelProfiling(unittest.TestCase):
         result2 = self.k_np.k(self.s1, self.s1)
         print result2
 
-    @unittest.skip('profiling')
+    #@unittest.skip('profiling')
     def test_prof_3(self):
-        data = np.loadtxt('flakes/tests/trial2', dtype=object, delimiter='\t')[:10]
+        data = np.loadtxt('flakes/tests/trial2', dtype=object, delimiter='\t')[:2]
         inputs = data[:, 1:]
         self.k_tf.order = 30
         self.k_tf.order_coefs = [0.1, 0.7, 0.5, 0.3, 0.1] + ([0.1] * 25)
         self.k_tf.decay = 0.1
         alphabet = list(set(''.join(inputs.flatten())))
         self.k_tf.alphabet = {elem: i for i, elem in enumerate(alphabet)}
-        result = self.k_tf.K(inputs)
+        #result = self.k_tf.K(inputs)
+        for i in range(50):
+            print i
+            #import ipdb; ipdb.set_trace()
+            result = self.k_tf.k(inputs[0][0], inputs[1][0])
         print inputs
         print result
+
+    @unittest.skip('profiling')
+    def test_prof_4(self):
+        self.k_tf.order = 8
+        self.k_tf.order_coefs = [0.1, 0.2, 0.4, 0.5, 0.7, 1, 1, 1]
+        self.k_tf.decay = 0.8
+        result1 = self.k_tf.k(self.s1, self.s1)
+        print result1
+
+        self.k_np.order = 8
+        self.k_np.order_coefs = [0.1, 0.2, 0.4, 0.5, 0.7, 1, 1, 1]
+        self.k_np.decay = 0.8
+        print "START PROF 4"
+        for i in range(100):
+            result2 = self.k_np.k(self.s1, self.s1)
+        print result2
 
 
 class GPyTests(unittest.TestCase):
@@ -142,13 +162,16 @@ class GPyTests(unittest.TestCase):
     def test_gpy_1(self):
         data = np.loadtxt('flakes/tests/trial2', dtype=object, delimiter='\t')[:2]
         inputs = data[:, 1:]
-        k = flakes.wrappers.gpy.GPyStringKernel()
+        k = flakes.wrappers.gpy.GPyStringKernel(mode='numpy')
         k.order = 30
         k.order_coefs = [0.1, 0.7, 0.5, 0.3, 0.1] + ([0.1] * 25)
         k.decay = 0.1
         alphabet = list(set(''.join(inputs.flatten())))
         k.alphabet = {elem: i for i, elem in enumerate(alphabet)}
-        result = k.K(inputs)
+        for i in range(100):
+            print i
+            #result = k.K(inputs)
+            result = k.k(inputs[0][0], inputs[1][0])
         print result
 
     @unittest.skip('profiling')
@@ -157,8 +180,8 @@ class GPyTests(unittest.TestCase):
         inputs = data[:, 1:]
         labels = data[:, :1]
         k = flakes.wrappers.gpy.GPyStringKernel()
-        k.order = 30
-        k.order_coefs = [0.1, 0.7, 0.5, 0.3, 0.1] + ([0.1] * 25)
+        k.order = 5
+        k.order_coefs = [0.1, 0.7, 0.5, 0.3, 0.1]# + ([0.1] * 25)
         k.decay = 0.1
         alphabet = list(set(''.join(inputs.flatten())))
         k.alphabet = {elem: i for i, elem in enumerate(alphabet)}
@@ -166,7 +189,7 @@ class GPyTests(unittest.TestCase):
         m = GPy.models.GPRegression(inputs, labels, kernel=k)
         print labels
         print m
-        m.optimize(messages=True, max_iters=10)
+        m.optimize(messages=True, max_iters=20)
         print m
         result = m.predict(inputs)
         print result
