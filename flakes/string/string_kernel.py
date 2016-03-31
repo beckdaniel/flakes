@@ -28,11 +28,6 @@ class StringKernel(object):
             self.sim = sims.hard_match
         self.graph = None
 
-    #def _tf_init(self, maxlen):
-    #    self.maxlen = maxlen
-    #    self._build_graph()
-    #    self.session = tf.Session(graph=self.graph)
-
     def _k_slow(self, s1, s2):
         """
         This is a slow version using explicit loops. Useful for testing
@@ -116,19 +111,15 @@ class StringKernel(object):
 
         # Now we built the input matrices and run the session
         # over the built graph.
-        #import ipdb; ipdb.set_trace()
         if not isinstance(s1, np.ndarray):
             s1 = self._build_symbol_tensor(s1)
         if not isinstance(s2, np.ndarray):
             s2 = self._build_symbol_tensor(s2)
         with tf.Session(graph=self.graph) as sess:
             output = sess.run(self.result, feed_dict={self.mat1: s1, self.mat2: s2})
-        #output = self.session.run(self.result, feed_dict={self.mat1: s1, self.mat2: s2})
-
         return output
 
     def _build_graph(self):
-        print "BUILD GRAPH"
         n = self.maxlen
         m = self.maxlen
         decay = self.decay
@@ -212,6 +203,7 @@ class StringKernel(object):
             print self.graph
             print "BUILDING GRAPH"
             self._build_graph()
+            print "GRAPH BUILT"
 
         if X2 is None:
             X2 = X

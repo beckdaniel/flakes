@@ -85,7 +85,7 @@ class StringKernelTests(unittest.TestCase):
         self.assertAlmostEqual(result1, result2, places=2)
         
 
-#@unittest.skip('profiling')
+@unittest.skip('profiling')
 class StringKernelProfiling(unittest.TestCase):
 
     def setUp(self):
@@ -122,7 +122,7 @@ class StringKernelProfiling(unittest.TestCase):
         result2 = self.k_np.k(self.s1, self.s1)
         print result2
 
-    #@unittest.skip('profiling')
+    @unittest.skip('profiling')
     def test_prof_3(self):
         data = np.loadtxt('flakes/tests/trial2', dtype=object, delimiter='\t')[:2]
         inputs = data[:, 1:]
@@ -152,6 +152,7 @@ class StringKernelProfiling(unittest.TestCase):
         self.k_np.decay = 0.8
         print "START PROF 4"
         for i in range(100):
+            print i
             result2 = self.k_np.k(self.s1, self.s1)
         print result2
 
@@ -174,19 +175,21 @@ class GPyTests(unittest.TestCase):
             result = k.k(inputs[0][0], inputs[1][0])
         print result
 
-    @unittest.skip('profiling')
+    #@unittest.skip('profiling')
     def test_gpy_2(self):
-        data = np.loadtxt('flakes/tests/trial2', dtype=object, delimiter='\t')[:2]
+        data = np.loadtxt('flakes/tests/trial2', dtype=object, delimiter='\t')[:10]
         inputs = data[:, 1:]
         labels = data[:, :1]
         k = flakes.wrappers.gpy.GPyStringKernel()
-        k.order = 5
-        k.order_coefs = [0.1, 0.7, 0.5, 0.3, 0.1]# + ([0.1] * 25)
+        bias = GPy.kern.Bias(1)
+        bias['variance'] = 1700
+        k.order = 1
+        k.order_coefs = [0.9, 0.7]#, 0.5, 0.3, 0.1]# + ([0.1] * 25)
         k.decay = 0.1
         alphabet = list(set(''.join(inputs.flatten())))
         k.alphabet = {elem: i for i, elem in enumerate(alphabet)}
 
-        m = GPy.models.GPRegression(inputs, labels, kernel=k)
+        m = GPy.models.GPRegression(inputs, labels, kernel=k+bias)
         print labels
         print m
         m.optimize(messages=True, max_iters=20)
