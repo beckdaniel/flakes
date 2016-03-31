@@ -72,11 +72,13 @@ class StringKernel(object):
         sim = self.sim
         coefs = self.order_coefs
 
+        if not isinstance(s1, np.ndarray):
+            s1 = self._build_symbol_tensor(s1, n)
+        if not isinstance(s2, np.ndarray):
+            s2 = self._build_symbol_tensor(s2, m)
+
         # Store sim(j, k) values
-        S = np.zeros(shape=(n, m))
-        for j in xrange(n):
-            for k in xrange(m):
-                S[j,k] = sim(s1[j], s2[k])
+        S = s1.T.dot(s2)
         
         # Triangular matrix over decay powers
         max_len = max(n, m)
@@ -112,9 +114,9 @@ class StringKernel(object):
         # Now we built the input matrices and run the session
         # over the built graph.
         if not isinstance(s1, np.ndarray):
-            s1 = self._build_symbol_tensor(s1)
+            s1 = self._build_symbol_tensor(s1, self.maxlen)
         if not isinstance(s2, np.ndarray):
-            s2 = self._build_symbol_tensor(s2)
+            s2 = self._build_symbol_tensor(s2, self.maxlen)
         with tf.Session(graph=self.graph) as sess:
             output = sess.run(self.result, feed_dict={self.mat1: s1, self.mat2: s2})
         return output
@@ -180,13 +182,13 @@ class StringKernel(object):
                 results.append(coef * aux7)
             self.result = tf.add_n(results)
 
-    def _build_symbol_tensor(self, s):
+    def _build_symbol_tensor(self, s, slen):
         """
         Transform an input (string or list) into a
         numpy matrix.
         """
         dim = len(self.alphabet)
-        t = np.zeros(shape=(self.maxlen, dim))
+        t = np.zeros(shape=(slen, dim))
         for i, ch in enumerate(s):
             t[i, self.alphabet[ch]] = 1.0
         return t.T
