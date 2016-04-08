@@ -156,7 +156,7 @@ class StringKernelProfiling(unittest.TestCase):
         #self.k_np.order_coefs = [0.1, 0.2, 0.4, 0.5, 0.7, 1, 1, 1]
         #self.k_np.decay = 0.8
         #print "START PROF 4"
-        for i in range(1000):
+        for i in range(100):
             print i
             result2 = self.k_tf.k(self.s3, self.s4)
         print result2

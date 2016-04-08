@@ -28,7 +28,7 @@ class GPyStringKernel(StringKernel, Kern):
         self.decay.constrain_fixed(decay)
         self.order_coefs.constrain_fixed(order_coefs)
 
-    def K(self, X, X2=None):
+    def _K(self, X, X2=None):
         """
         Calculate the Gram matrix over two lists of strings.
         """
@@ -39,7 +39,7 @@ class GPyStringKernel(StringKernel, Kern):
         if self.graph is None:
             print self.graph
             print "BUILDING GRAPH"
-            self._build_graph()
+            self._build_graph(self.maxlen)
             print "GRAPH BUILT"
 
         if X2 is None:

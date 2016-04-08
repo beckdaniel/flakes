@@ -4,6 +4,7 @@ import flakes.util.similarities as sims
 from tensorflow.python.ops import control_flow_ops as cfops
 from tensorflow.python.ops import tensor_array_ops as taops
 from memory_profiler import profile
+import sys
 
 
 class StringKernel(object):
@@ -23,10 +24,8 @@ class StringKernel(object):
             self.k = self._k_numpy
         elif mode == 'tf':
             self.k = self._k_tf
-        # Select similarity metric
-        if sim == 'hard':
-            self.sim = sims.hard_match
         self.graph = None
+        self.maxlen = 0
 
     def _k_slow(self, s1, s2):
         """
@@ -37,7 +36,7 @@ class StringKernel(object):
         m = len(s2)
         decay = self.decay
         order = self.order
-        sim = self.sim
+        sim = sims.hard_match
         coefs = self.order_coefs
 
         Kp = np.zeros(shape=(order + 1, n, m))
@@ -69,7 +68,6 @@ class StringKernel(object):
         m = len(s2)
         decay = self.decay
         order = self.order
-        sim = self.sim
         coefs = self.order_coefs
 
         if not isinstance(s1, np.ndarray):
@@ -107,23 +105,27 @@ class StringKernel(object):
         This is a Tensorflow version which builds a graph and run a session
         on its own.
         """
+        maxlen = max(len(s1), len(s2))
         if not self.graph:
-            self.maxlen = max(len(s1), len(s2))
-            self._build_graph()
+            self._build_graph(maxlen)
 
         # Now we built the input matrices and run the session
         # over the built graph.
         if not isinstance(s1, np.ndarray):
-            s1 = self._build_symbol_tensor(s1, self.maxlen)
+            s1 = self._build_symbol_tensor(s1, maxlen)
+        else:
+            s1 = s1.T
         if not isinstance(s2, np.ndarray):
-            s2 = self._build_symbol_tensor(s2, self.maxlen)
+            s2 = self._build_symbol_tensor(s2, maxlen)
+        else:
+            s2 = s2.T
         with tf.Session(graph=self.graph) as sess:
             output = sess.run(self.result, feed_dict={self.mat1: s1, self.mat2: s2})
         return output
 
-    def _build_graph(self):
-        n = self.maxlen
-        m = self.maxlen
+    def _build_graph(self, maxlen):
+        n = maxlen
+        m = maxlen
         decay = self.decay
         order = self.order
 
@@ -138,6 +140,7 @@ class StringKernel(object):
             self.mat1 = tf.placeholder("float", [None, n])
             self.mat2 = tf.placeholder("float", [None, m])
             S = tf.matmul(tf.transpose(self.mat1), self.mat2)
+            #S = tf.matmul(self.mat1, tf.transpose(self.mat2))
 
             # Initilazing auxiliary variables.
             # The zero vectors are used for padding.
@@ -146,10 +149,9 @@ class StringKernel(object):
             m_zeros = tf.constant(np.zeros(shape=(1, m)), dtype=tf.float32)
 
             # Triangular matrices over decay powers.
-            max_len = np.max([n, m])
-            npd = np.zeros((max_len, max_len))
+            npd = np.zeros((maxlen, maxlen))
             i1, i2 = np.indices(npd.shape)
-            for k in xrange(max_len):
+            for k in xrange(maxlen):
                 npd[i2-k == i1] = decay ** k
             D1 = tf.constant(npd[1:n, 1:n], dtype=tf.float32)
             D2 = tf.constant(npd[1:m, 1:m], dtype=tf.float32)
@@ -160,27 +162,43 @@ class StringKernel(object):
             # A more elegant solution would involve some scan-like
             # Op but this seems to have some memory leaks in
             # TF 0.7.1
-            Kp = []
-            Kp.append(tf.ones(shape=(n, m)))
-            for i in xrange(1, order):
-                aux1 = tf.mul(S[:n-1, :m-1], Kp[i-1][:n-1, :m-1])
+
+            ones = tf.ones(shape=(1, n, m))
+            zeros = tf.zeros(shape=(order, n, m))
+            initial_Kp = tf.concat(0, [ones, zeros])
+            Kp = taops.TensorArray(dtype=initial_Kp.dtype, size=order+1,
+                                   tensor_array_name="Kp")
+            Kp = Kp.unpack(initial_Kp)
+            acc_Kp = taops.TensorArray(dtype=initial_Kp.dtype, size=order+1,
+                                   tensor_array_name="ret_Kp")
+
+            # Main loop. We use a tensorflow While here.
+            i = tf.constant(0)
+            a = Kp.read(0)
+            acc_Kp = acc_Kp.write(0, a)
+
+            def _update_Kp(acc_Kp, a, S, i):
+                aux1 = tf.mul(S, a[:n-1, :m-1])
                 aux2 = tf.transpose(tf.matmul(aux1, D2) * decay_sq)
                 aux3 = tf.concat(0, [n_zeros, aux2])
                 aux4 = tf.transpose(tf.matmul(aux3, D1))
-                Kp.append(tf.concat(0, [m_zeros, aux4]))
+                a = tf.concat(0, [m_zeros, aux4])
+                i += 1
+                acc_Kp = acc_Kp.write(i, a)
+                return [acc_Kp, a, S, i]
 
+            cond = lambda _1, _2, _3, i: i < order
+            loop_vars = [acc_Kp, a, S[:n-1, :m-1], i]
+            final_Kp, _, _, _ = cfops.While(cond=cond, body=_update_Kp, 
+                                            loop_vars=loop_vars)
+            final_Kp = final_Kp.pack()
 
             # Final calculation. "result" contains the final kernel value.
-            # Because our Kps are in a list we can't use vectorization
-            # over "i" anymore... Oh well...
-            results = []
-            for i in xrange(order):
-                coef = self.order_coefs[i]
-                aux5 = S * decay_sq
-                aux6 = tf.mul(aux5, Kp[i])
-                aux7 = tf.reduce_sum(aux6)
-                results.append(coef * aux7)
-            self.result = tf.add_n(results)
+            mul1 = S * final_Kp[:order, :, :]
+            sum1 = tf.reduce_sum(mul1, 1)
+            Ki = tf.reduce_sum(sum1, 1, keep_dims=True) * decay_sq
+            coefs = tf.convert_to_tensor([self.order_coefs])
+            self.result = tf.matmul(coefs, Ki)
 
     def _build_symbol_tensor(self, s, slen):
         """
@@ -198,25 +216,37 @@ class StringKernel(object):
         Calculate the Gram matrix over two lists of strings.
         """
         if X2 is not None:
-            self.maxlen = max([len(x[0]) for x in np.concatenate((X, X2))])
+            maxlen = max([len(x[0]) for x in np.concatenate((X, X2))])
         else:
-            self.maxlen = max([len(x[0]) for x in X])
-        if self.graph is None:
-            print self.graph
-            print "BUILDING GRAPH"
-            self._build_graph()
-            print "GRAPH BUILT"
+            maxlen = max([len(x[0]) for x in X])
+        #print maxlen
 
+        # We have to build a new graph if 1) there is no graph or
+        # 2) current graph maxlen is not large enough for these inputs
+        if self.graph is None:
+            sys.stderr.write("No graph found. Building one...\n")
+            self._build_graph(maxlen)
+            self.maxlen = maxlen
+        elif maxlen > self.maxlen:
+            sys.stderr.write("Current graph does not have space for these string sizes. Building a new one...\n")
+            self._build_graph(maxlen)
+            self.maxlen = maxlen
+
+        # Symmetry check to ensure that we only calculate
+        # the lower diagonal.
         if X2 is None:
             X2 = X
             symm = True
         else:
             symm = False
+
         result = np.zeros(shape=(len(X), len(X2)))
         for i, x1 in enumerate(X):
             for j, x2 in enumerate(X2):
                 if symm and (j < i):
                     result[i, j] = result[j, i]
                 else:
+                    #print x1.shape
+                    #print x2.shape
                     result[i, j] = self.k(x1[0], x2[0])
         return result
