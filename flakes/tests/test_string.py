@@ -135,10 +135,26 @@ class StringKernelProfiling(unittest.TestCase):
         print inputs
         print result
 
-    #@unittest.skip('profiling')
+    @unittest.skip('profiling')
     def test_prof_4(self):
         self.k_tf.order_coefs = [0.1, 0.2, 0.4, 0.5, 0.7, 1, 1, 1]# + 32 * [1.0]
         self.k_tf.decay = 0.8
+        #result1 = self.k_tf.k(self.s1, self.s1)
+        #print result1
+
+        #self.k_np.order_coefs = [0.1, 0.2, 0.4, 0.5, 0.7, 1, 1, 1]
+        #self.k_np.decay = 0.8
+        #print "START PROF 4"
+        for i in range(50):
+            print i
+            result2 = self.k_tf.k(self.s1, self.s2)
+        print result2
+
+    @unittest.skip('profiling')
+    def test_prof_4_gpu(self):
+        self.k_tf.order_coefs = [0.1, 0.2, 0.4, 0.5, 0.7, 1, 1, 1]# + 32 * [1.0]
+        self.k_tf.decay = 0.8
+        self.k_tf.device = '/gpu:7'
         #result1 = self.k_tf.k(self.s1, self.s1)
         #print result1
 

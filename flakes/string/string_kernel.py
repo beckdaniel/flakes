@@ -13,7 +13,7 @@ class StringKernel(object):
     """
 
     def __init__(self, decay=1.0, order_coefs=[1.0], mode='tf',
-                 sim='hard'):
+                 sim='hard', device='/cpu:0'):
         self.decay = decay
         self.order_coefs = order_coefs
         # Select implementation
@@ -25,6 +25,7 @@ class StringKernel(object):
             self.k = self._k_tf
         self.graph = None
         self.maxlen = 0
+        self.device = device
 
     @property
     def order(self):
@@ -140,7 +141,7 @@ class StringKernel(object):
 
         # We create a Graph for the calculation
         self.graph = tf.Graph()
-        with self.graph.as_default():
+        with self.graph.as_default(), tf.device(self.device):
 
             # Strings will be represented as matrices of
             # embeddings and the similarity is just
