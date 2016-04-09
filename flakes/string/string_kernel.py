@@ -16,7 +16,6 @@ class StringKernel(object):
                  sim='hard'):
         self.decay = decay
         self.order_coefs = order_coefs
-        #self.order = len(order_coefs)
         # Select implementation
         if mode == 'slow':
             self.k = self._k_slow
@@ -206,7 +205,9 @@ class StringKernel(object):
     def _build_symbol_tensor(self, s):
         """
         Transform an input (string or list) into a
-        numpy matrix.
+        numpy matrix. Notice that we use an implicit
+        zero padding here since the matrix shape is fixed
+        to (maxlen, dim).
         """
         dim = len(self.alphabet)
         t = np.zeros(shape=(self.maxlen, dim))
