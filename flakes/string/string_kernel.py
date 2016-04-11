@@ -41,10 +41,16 @@ class StringKernel(object):
         self.match_decay = match_decay
         self.order_coefs = order_coefs
         self.mode = mode
-        self.device = device
+
         # This is only used in TF mode
         self.graph = None
         self.maxlen = 0
+        self.device = device
+        if 'gpu' in device:
+            self.gpu_config = tf.ConfigProto(
+                #gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.5),
+                device_count = {'GPU': 1}
+            )
 
     @property
     def order(self):
@@ -96,7 +102,10 @@ class StringKernel(object):
                 self.maxlen = maxlen
 
             # Finally, we also start a TF session
-            self.sess = tf.Session(graph=self.graph)
+            if 'gpu' in self.device:
+                self.sess = tf.Session(graph=self.graph, config=self.gpu_config)
+            else:
+                self.sess = tf.Session(graph=self.graph)
             
         # All set up. Proceed with Gram matrix calculation.
         result = np.zeros(shape=(len(X), len(X2)))
