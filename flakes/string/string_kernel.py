@@ -1,6 +1,5 @@
 import tensorflow as tf
 import numpy as np
-import flakes.util.similarities as sims
 from tensorflow.python.ops import control_flow_ops as cfops
 from tensorflow.python.ops import tensor_array_ops as taops
 from memory_profiler import profile
@@ -9,137 +8,128 @@ import sys
 
 class StringKernel(object):
     """
-    A general class for String Kernels.
+    A general class for String Kernels. Default mode is
+    TensorFlow mode but numpy and non-vectorized implementations
+    are also available. The last two should be used only for
+    testing and debugging, TF is generally faster, even in
+    CPU-only environments.
+    
+    The parameterization is based on:
+    
+    Cancedda et. al (2003) "Word-Sequence Kernels" JMLR
+
+    with two different decay parameters: one for gaps
+    and another one for symbol matchings. There is 
+    also a list of order coeficients which weights
+    different n-grams orders. The overall order
+    is implicitly obtained by the size of this list.
+    This is *not* the symbol-dependent version.
+    
+    :param gap_decay: decay for symbols gaps, defaults to 1.0
+    :param match_decay: decay for symbols matches, defaults to 1.0
+    :param order_coefs: list of coefficients for different ngram
+    orders, defaults to [1.0]
+    :param mode: inner kernel implementation, defaults to TF
+    :param sim: similarity measure used, default to hard_match
+    :param device: where to run the inner kernel calculation,
+    in TF nomenclature (only used if in TF mode).
     """
 
-    def __init__(self, decay=1.0, order_coefs=[1.0], mode='tf',
+    def __init__(self, gap_decay=1.0, match_decay=1.0,
+                 order_coefs=[1.0], mode='tf',
                  sim='hard', device='/cpu:0'):
-        self.decay = decay
+        self.gap_decay = gap_decay
+        self.match_decay = match_decay
         self.order_coefs = order_coefs
-        # Select implementation
-        if mode == 'slow':
-            self.k = self._k_slow
-        elif mode == 'numpy':
-            self.k = self._k_numpy
-        elif mode == 'tf':
-            self.k = self._k_tf
+        self.mode = mode
+        self.device = device
+        # This is only used in TF mode
         self.graph = None
         self.maxlen = 0
-        self.device = device
 
     @property
     def order(self):
+        """
+        Kernel ngram order, defined implicitly.
+        """
         return len(self.order_coefs)
 
-    def _k_slow(self, s1, s2):
+    def K(self, X, X2=None):
         """
-        This is a slow version using explicit loops. Useful for testing
-        but shouldn't be used in practice.
+        Calculate the Gram matrix over two lists of strings. The
+        underlying method used for kernel calculation depends
+        on self.mode (slow, numpy or TF). 
         """
-        n = len(s1)
-        m = len(s2)
-        decay = self.decay
-        order = self.order
-        sim = sims.hard_match
-        coefs = self.order_coefs
+        # Symmetry check to ensure that we only calculate
+        # the lower diagonal.
+        if X2 is None:
+            X2 = X
+            symm = True
+        else:
+            symm = False
 
-        Kp = np.zeros(shape=(order + 1, n, m))
-        for j in xrange(n):
-            for k in xrange(m):
-                Kp[0][j][k] = 1.0
-        for i in xrange(order):
-            for j in xrange(n - 1):
-                Kpp = 0.0
-                for k in xrange(m - 1):
-                    Kpp = (decay * Kpp + 
-                           decay * decay * sim(s1[j], s2[k]) * Kp[i][j][k])
-                    Kp[i + 1][j + 1][k + 1] = decay * Kp[i + 1][j][k + 1] + Kpp
-                    result = 0.0
-        for i in xrange(order):
-            result_i = 0.0
-            for j in xrange(n):
-                for k in xrange(m):
-                    result_i += decay * decay * sim(s1[j], s2[k]) * Kp[i][j][k]
-            result += coefs[i] * result_i
+        # This can also be calculated for single elements but
+        # we need to explicitly convert to lists before any
+        # processing
+        if not (isinstance(X, list) or isinstance(X, np.ndarray)):
+            X = [[X]]
+        if not (isinstance(X2, list) or isinstance(X2, np.ndarray)):
+            X2 = [[X2]]
+
+        # If we are in TF mode we need to do some preparations...
+        if self.mode == 'tf':
+            # Instead of using one graph per string pair, we
+            # build a single one using the maximum length in
+            # the data. Smaller strings are padded with zeroes
+            # when converted to the matrix input.
+            maxlen = max([len(x[0]) for x in np.concatenate((X, X2))])
+
+            # We have to build a new graph if 1) there is no graph or
+            # 2) current graph maxlen is not large enough for these inputs
+            if self.graph is None:
+                sys.stderr.write("No graph found. Building one.\n")
+                self._build_graph(maxlen)
+                self.maxlen = maxlen
+            elif maxlen > self.maxlen:
+                sys.stderr.write("Current graph does not have space for" +
+                                 "these string sizes. Building a new one.\n")
+                self._build_graph(maxlen)
+                self.maxlen = maxlen
+
+            # Finally, we also start a TF session
+            self.sess = tf.Session(graph=self.graph)
+            
+        # All set up. Proceed with Gram matrix calculation.
+        result = np.zeros(shape=(len(X), len(X2)))
+        for i, x1 in enumerate(X):
+            for j, x2 in enumerate(X2):
+                if symm and (j < i):
+                    result[i, j] = result[j, i]
+                else:
+                    if self.mode == 'tf':
+                        result[i, j] = self._k_tf(x1[0], x2[0])
+                    elif self.mode == 'numpy':
+                        result[i, j] = self._k_numpy(x1[0], x2[0])
+                    elif self.mode == 'slow':
+                        result[i, j] = self._k_slow(x1[0], x2[0])
+        
+        # If we are in TF mode we close the session
+        if self.mode == 'tf':
+            self.sess.close()
+
         return result
 
-    def _k_numpy(self, s1, s2):
-        """
-        Calculates k over two strings. Inputs can be strings or lists.
-        This is a vectorized version using numpy.
-        """
-        n = len(s1)
-        m = len(s2)
-        #self.maxlen = max(len(s1), len(s2))
-        decay = self.decay
-        order = self.order
-        coefs = self.order_coefs
-
-        if not isinstance(s1, np.ndarray):
-            s1 = self._build_symbol_tensor_np(s1)
-        if not isinstance(s2, np.ndarray):
-            s2 = self._build_symbol_tensor_np(s2)
-
-        # Store sim(j, k) values
-        S = s1.T.dot(s2)
-        
-        # Triangular matrix over decay powers
-        max_len = max(n, m)
-        D = np.zeros((max_len, max_len))
-        d1, d2 = np.indices(D.shape)
-        for k in xrange(max_len):
-            D[d2-k == d1] = decay ** k
-
-        # Initializing auxiliary variables
-        Kp = np.zeros(shape=(order + 1, n, m))
-        Kp[0,:,:] = 1.0
-        Kpp = np.zeros(shape=(order, n, m))
-        decay_sq = decay * decay
-
-        for i in xrange(order):
-            Kpp[i, :-1, 1:] = decay_sq * (S[:-1,:-1] * Kp[i,:-1,:-1]).dot(D[1:m, 1:m])
-            Kp[i + 1, 1:] = Kpp[i, :-1].T.dot(D[1:n, 1:n]).T
-        
-        # Final calculation
-        Ki = np.sum(np.sum(S * Kp[:-1], axis=1), axis=1) * decay_sq
-        return Ki.dot(coefs)
-
-    def _k_tf(self, s1, s2):
-        """
-        Calculates k over two strings. Inputs can be strings or lists.
-        This is a Tensorflow version which builds a graph and run a session
-        on its own.
-        """
-        maxlen = max(len(s1), len(s2))
-        
-        # If there's no graph, we build one.
-        # If one of the strings does not fit inside the graph
-        # due to its length, we build a new graph.
-        # TODO: check if we can easy modify the previous graph
-        # instead.
-        if (not self.graph) or (maxlen > self.maxlen):
-            self._build_graph(maxlen)
-            self.maxlen = maxlen
-
-        # Now we built the input matrices and run the session
-        # over the graph.
-        if not isinstance(s1, np.ndarray):
-            s1 = self._build_symbol_tensor(s1)
-        else:
-            s1 = s1.T
-        if not isinstance(s2, np.ndarray):
-            s2 = self._build_symbol_tensor(s2)
-        else:
-            s2 = s2.T
-        with tf.Session(graph=self.graph) as sess:
-            output = sess.run(self.result, feed_dict={self.mat1: s1, self.mat2: s2})
-        return output
-
     def _build_graph(self, n):
-        decay = self.decay
+        """
+        Builds the graph for TF calculation. This should
+        be usually called only once but can be called again
+        if we update the maximum string length in our
+        dataset.
+        """
+        gap_decay = self.gap_decay
+        match_decay = self.match_decay
         order = self.order
 
-        # We create a Graph for the calculation
         self.graph = tf.Graph()
         with self.graph.as_default(), tf.device(self.device):
 
@@ -153,7 +143,7 @@ class StringKernel(object):
 
             # Initilazing auxiliary variables.
             # The zero vectors are used for padding inside While.
-            decay_sq = decay * decay
+            match_decay_sq = match_decay * match_decay
             n_zeros = tf.constant(np.zeros(shape=(1, n-1)), dtype=tf.float32)
             m_zeros = tf.constant(np.zeros(shape=(1, n)), dtype=tf.float32)
 
@@ -161,7 +151,7 @@ class StringKernel(object):
             npd = np.zeros((n, n))
             i1, i2 = np.indices(npd.shape)
             for k in xrange(n):
-                npd[i2-k == i1] = decay ** k
+                npd[i2-k == i1] = gap_decay ** k
             D = tf.constant(npd[1:n, 1:n], dtype=tf.float32)
 
             # Initialize Kp, one for each n-gram order (including 0)
@@ -182,7 +172,7 @@ class StringKernel(object):
             acc_Kp = acc_Kp.write(0, a)
             def _update_Kp(acc_Kp, a, S, i):
                 aux1 = tf.mul(S, a[:n-1, :n-1])
-                aux2 = tf.transpose(tf.matmul(aux1, D) * decay_sq)
+                aux2 = tf.transpose(tf.matmul(aux1, D) * match_decay_sq)
                 aux3 = tf.concat(0, [n_zeros, aux2])
                 aux4 = tf.transpose(tf.matmul(aux3, D))
                 a = tf.concat(0, [m_zeros, aux4])
@@ -199,70 +189,116 @@ class StringKernel(object):
             # multiply then by their coeficients.
             mul1 = S * final_Kp[:order, :, :]
             sum1 = tf.reduce_sum(mul1, 1)
-            Ki = tf.reduce_sum(sum1, 1, keep_dims=True) * decay_sq
+            Ki = tf.reduce_sum(sum1, 1, keep_dims=True) * match_decay_sq
             coefs = tf.convert_to_tensor([self.order_coefs])
             self.result = tf.matmul(coefs, Ki)
 
-    def _build_symbol_tensor(self, s):
+    def _build_input_matrix(self, s, l):
         """
         Transform an input (string or list) into a
         numpy matrix. Notice that we use an implicit
-        zero padding here since the matrix shape is fixed
-        to (maxlen, dim).
+        zero padding here when l > len(s).
         """
         dim = len(self.alphabet)
-        t = np.zeros(shape=(self.maxlen, dim))
+        t = np.zeros(shape=(l, dim))
         for i, ch in enumerate(s):
             t[i, self.alphabet[ch]] = 1.0
         return t.T
 
-    def _build_symbol_tensor_np(self, s):
+    def _k_tf(self, s1, s2):
         """
-        Transform an input (string or list) into a
-        numpy matrix.
+        Calculates k over two strings. Inputs can be strings or lists.
+        This is a Tensorflow version 
         """
-        dim = len(self.alphabet)
-        t = np.zeros(shape=(len(s), dim))
-        for i, ch in enumerate(s):
-            t[i, self.alphabet[ch]] = 1.0
-        return t.T
-       
-    def K(self, X, X2=None):
-        """
-        Calculate the Gram matrix over two lists of strings.
-        """
-        if X2 is not None:
-            maxlen = max([len(x[0]) for x in np.concatenate((X, X2))])
+        if not isinstance(s1, np.ndarray):
+            s1 = self._build_input_matrix(s1, self.maxlen)
         else:
-            maxlen = max([len(x[0]) for x in X])
-        #print maxlen
-
-        # We have to build a new graph if 1) there is no graph or
-        # 2) current graph maxlen is not large enough for these inputs
-        if self.graph is None:
-            sys.stderr.write("No graph found. Building one...\n")
-            self._build_graph(maxlen)
-            self.maxlen = maxlen
-        elif maxlen > self.maxlen:
-            sys.stderr.write("Current graph does not have space for these string sizes. Building a new one...\n")
-            self._build_graph(maxlen)
-            self.maxlen = maxlen
-
-        # Symmetry check to ensure that we only calculate
-        # the lower diagonal.
-        if X2 is None:
-            X2 = X
-            symm = True
+            s1 = s1.T
+        if not isinstance(s2, np.ndarray):
+            s2 = self._build_input_matrix(s2, self.maxlen)
         else:
-            symm = False
+            s2 = s2.T
+        output = self.sess.run(self.result, feed_dict={self.mat1: s1, 
+                                                       self.mat2: s2})
+        return output
 
-        result = np.zeros(shape=(len(X), len(X2)))
-        for i, x1 in enumerate(X):
-            for j, x2 in enumerate(X2):
-                if symm and (j < i):
-                    result[i, j] = result[j, i]
-                else:
-                    #print x1.shape
-                    #print x2.shape
-                    result[i, j] = self.k(x1[0], x2[0])
+    def _k_numpy(self, s1, s2):
+        """
+        Calculates k over two strings. Inputs can be strings or lists.
+        This is a vectorized version using numpy.
+        """
+        n = len(s1)
+        m = len(s2)
+        gap_decay = self.gap_decay
+        match_decay = self.match_decay
+        order = self.order
+        coefs = self.order_coefs
+
+        if not isinstance(s1, np.ndarray):
+            s1 = self._build_input_matrix(s1, len(s1))
+        if not isinstance(s2, np.ndarray):
+            s2 = self._build_input_matrix(s2, len(s2))
+
+        # Store sim(j, k) values
+        S = s1.T.dot(s2)
+        
+        # Triangular matrix over decay powers
+        max_len = max(n, m)
+        D = np.zeros((max_len, max_len))
+        d1, d2 = np.indices(D.shape)
+        for k in xrange(max_len):
+            D[d2-k == d1] = gap_decay ** k
+
+        # Initializing auxiliary variables
+        Kp = np.zeros(shape=(order + 1, n, m))
+        Kp[0,:,:] = 1.0
+        Kpp = np.zeros(shape=(order, n, m))
+        match_decay_sq = match_decay * match_decay
+
+        for i in xrange(order):
+            Kpp[i, :-1, 1:] = (match_decay_sq * 
+                               (S[:-1,:-1] * Kp[i,:-1,:-1]).dot(D[1:m, 1:m]))
+            Kp[i + 1, 1:] = Kpp[i, :-1].T.dot(D[1:n, 1:n]).T
+        
+        # Final calculation
+        Ki = np.sum(np.sum(S * Kp[:-1], axis=1), axis=1) * match_decay_sq
+        return Ki.dot(coefs)
+
+    def _k_slow(self, s1, s2):
+        """
+        This is a slow version using explicit loops. Useful for testing
+        but shouldn't be used in practice.
+        """
+        n = len(s1)
+        m = len(s2)
+        gap_decay = self.gap_decay
+        match_decay = self.match_decay
+        order = self.order
+        coefs = self.order_coefs
+
+        if not isinstance(s1, np.ndarray):
+            s1 = self._build_input_matrix(s1, len(s1)).T
+        if not isinstance(s2, np.ndarray):
+            s2 = self._build_input_matrix(s2, len(s2)).T
+
+        Kp = np.zeros(shape=(order + 1, n, m))
+        for j in xrange(n):
+            for k in xrange(m):
+                Kp[0][j][k] = 1.0
+        for i in xrange(order):
+            for j in xrange(n - 1):
+                Kpp = 0.0
+                for k in xrange(m - 1):
+                    Kpp = (gap_decay * Kpp + 
+                           match_decay * match_decay * (s1[j].T.dot(s2[k])) * Kp[i][j][k])
+                    Kp[i + 1][j + 1][k + 1] = gap_decay * Kp[i + 1][j][k + 1] + Kpp
+        result = 0.0
+        for i in xrange(order):
+            result_i = 0.0
+            for j in xrange(n):
+                for k in xrange(m):
+                    result_i += match_decay * match_decay * (s1[j].T.dot(s2[k])) * Kp[i][j][k]
+            result += coefs[i] * result_i
         return result
+
+       
