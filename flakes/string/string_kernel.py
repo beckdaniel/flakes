@@ -48,8 +48,8 @@ class StringKernel(object):
         self.device = device
         if 'gpu' in device:
             self.gpu_config = tf.ConfigProto(
-                #gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.5),
-                device_count = {'GPU': 1}
+                gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.5),
+                device_count = {'gpu': 1}
             )
 
     @property
