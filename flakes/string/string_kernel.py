@@ -2,7 +2,6 @@ import tensorflow as tf
 import numpy as np
 from tensorflow.python.ops import control_flow_ops as cfops
 from tensorflow.python.ops import tensor_array_ops as taops
-from memory_profiler import profile
 import sys
 
 
