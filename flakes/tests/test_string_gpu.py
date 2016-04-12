@@ -12,9 +12,7 @@ class GPUStringKernelProfiling(unittest.TestCase):
         self.s2 = "To say he shall leave a wall of strong Towns behind him is to say nothing at all in this case, while there is an Army of 60000 Men in the field there; to say he shall want Provisions or any Assistance whatever is to say nothing while we are Masters of the Seas and can in four Hours come from Dover to Bologn, with Supplies of all Sorts, a passage so easie that you might bake his very Bread for him in Kent if you pleas'd."
         self.s3 = 'cgtagctagcgacgcagccaatcgatcg'
         self.s4 = 'cgagatgccaatagagagagcgctgta'
-        self.k_slow = flakes.string.StringKernel(mode='slow')
-        self.k_np = flakes.string.StringKernel(mode='numpy')
-        self.k_tf = flakes.string.StringKernel()
+        self.k_tf = flakes.string.StringKernel(device='/gpu:7')
         self.k_tf.alphabet = {elem: i for i, elem in enumerate(list(set(self.s1 + self.s2)))}
 
     @unittest.skip('profiling')
@@ -22,7 +20,6 @@ class GPUStringKernelProfiling(unittest.TestCase):
         self.k_tf.order_coefs = [0.1, 0.2, 0.4, 0.5, 0.7, 1, 1, 1]# + 32 * [1.0]
         self.k_tf.gap_decay = 0.8
         self.k_tf.match_decay = 0.8
-        self.k_tf.device = '/gpu:7'
         for i in range(25):
             print i
             result2 = self.k_tf.k(self.s1, self.s2)
@@ -33,7 +30,6 @@ class GPUStringKernelProfiling(unittest.TestCase):
         self.k_tf.order_coefs = [0.1, 0.2, 0.4, 0.5, 0.7, 1, 1, 1] + 32 * [1.0]
         self.k_tf.gap_decay = 0.8
         self.k_tf.match_decay = 0.8
-        self.k_tf.device = '/gpu:7'
         X = [[self.s1]] * 5
         X2 = [[self.s2]] * 5
         before = datetime.datetime.now()
