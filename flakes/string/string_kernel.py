@@ -69,9 +69,9 @@ class StringKernel(object):
         # the lower diagonal.
         if X2 is None:
             X2 = X
-            symm = True
+            gram = True
         else:
-            symm = False
+            gram = False
 
         # This can also be calculated for single elements but
         # we need to explicitly convert to lists before any
@@ -82,7 +82,7 @@ class StringKernel(object):
             X2 = [[X2]]
 
         # If we are in TF mode we need to do some preparations...
-        if self.mode == 'tf':
+        if self.mode == 'tf' or self.mode == 'tf-row':
             # Instead of using one graph per string pair, we
             # build a single one using the maximum length in
             # the data. Smaller strings are padded with zeroes
@@ -93,12 +93,18 @@ class StringKernel(object):
             # 2) current graph maxlen is not large enough for these inputs
             if self.graph is None:
                 sys.stderr.write("No graph found. Building one.\n")
-                self._build_graph(maxlen)
+                if self.mode == 'tf':
+                    self._build_graph(maxlen)
+                elif self.mode == 'tf-row':
+                    self._build_graph_row(maxlen)
                 self.maxlen = maxlen
             elif maxlen > self.maxlen:
                 sys.stderr.write("Current graph does not have space for" +
                                  "these string sizes. Building a new one.\n")
-                self._build_graph(maxlen)
+                if self.mode == 'tf':
+                    self._build_graph(maxlen)
+                elif self.mode == 'tf-row':
+                    self._build_graph_row(maxlen)
                 self.maxlen = maxlen
 
             # Finally, we also start a TF session
@@ -109,20 +115,35 @@ class StringKernel(object):
             
         # All set up. Proceed with Gram matrix calculation.
         result = np.zeros(shape=(len(X), len(X2)))
-        for i, x1 in enumerate(X):
-            for j, x2 in enumerate(X2):
-                if symm and (j < i):
-                    result[i, j] = result[j, i]
+        if self.mode == 'tf-row':
+            #result = self._k_tf_mat(X, X2)
+            for i, x1 in enumerate(X):
+                if gram:
+                    row = X2[:i+1]
                 else:
-                    if self.mode == 'tf':
-                        result[i, j] = self._k_tf(x1[0], x2[0])
-                    elif self.mode == 'numpy':
-                        result[i, j] = self._k_numpy(x1[0], x2[0])
-                    elif self.mode == 'slow':
-                        result[i, j] = self._k_slow(x1[0], x2[0])
+                    row = X2
+                row_result = self._k_tf_row(x1, row)
+                if gram:
+                    result[i, :i+1] = row_result
+                    if i > 0:
+                        result[:i+1, i] = row_result
+                else:
+                    result[i] = row_result              
+        else:
+            for i, x1 in enumerate(X):
+                for j, x2 in enumerate(X2):
+                    if gram and (j < i):
+                        result[i, j] = result[j, i]
+                    else:
+                        if self.mode == 'tf':
+                            result[i, j] = self._k_tf(x1[0], x2[0])
+                        elif self.mode == 'numpy':
+                            result[i, j] = self._k_numpy(x1[0], x2[0])
+                        elif self.mode == 'slow':
+                            result[i, j] = self._k_slow(x1[0], x2[0])
         
         # If we are in TF mode we close the session
-        if self.mode == 'tf':
+        if self.mode == 'tf' or self.mode == 'tf-row':
             self.sess.close()
 
         return result
@@ -158,6 +179,68 @@ class StringKernel(object):
             # Triangular matrices over decay powers.
             npd = np.zeros((n, n))
             i1, i2 = np.indices(npd.shape)
+            for k in xrange(n-1):
+                npd[i2-k-1 == i1] = gap_decay ** k
+            D = tf.constant(npd, dtype=tf.float32)
+
+            # Initialize Kp
+            # We know the shape of Kp before building the graph
+            # so we can use a "static" list of Ops here.
+            # A more elegant solution would involve some scan-like
+            # Op but this seems to have some memory leaks in
+            # TF 0.7.1
+            Kp = []
+            Kp.append(tf.ones(shape=(n, n)))
+            for i in xrange(1, order):
+                aux1 = tf.mul(S, Kp[i-1])
+                aux2 = tf.transpose(tf.matmul(aux1, D) * match_decay_sq)
+                aux3 = tf.transpose(tf.matmul(aux2, D))
+                Kp.append(aux3)
+
+            # Final calculation. "result" contains the final kernel value.
+            # Because our Kps are in a list we can't use vectorization
+            # over "i" anymore... Oh well...
+            results = []
+            for i in xrange(order):
+                coef = self.order_coefs[i]
+                aux5 = S * match_decay_sq
+                aux6 = tf.mul(aux5, Kp[i])
+                aux7 = tf.reduce_sum(aux6)
+                results.append(coef * aux7)
+            self.result = tf.add_n(results)
+
+    def _build_graph_mat(self, n):
+        """
+        Builds the graph for TF calculation. This should
+        be usually called only once but can be called again
+        if we update the maximum string length in our
+        dataset.
+        """
+        gap_decay = self.gap_decay
+        match_decay = self.match_decay
+        order = self.order
+
+        self.graph = tf.Graph()
+        with self.graph.as_default(), tf.device(self.device):
+
+            # Strings will be represented as matrices of
+            # embeddings and the similarity is just
+            # the dot product. Hard match is replicated
+            # by using one-hot embeddings.
+            self.mat_list1 = tf.placeholder("float", [None, n, None])
+            self.mat_list2 = tf.placeholder("float", [None, None, n])
+            S = tf.batch_matmul(self.mat_list1, self.mat_list2)
+            batch_size = S.get_shape()
+
+            # Initilazing auxiliary variables.
+            # The zero vectors are used for padding inside While.
+            match_decay_sq = match_decay * match_decay
+            n_zeros = tf.constant(np.zeros(shape=(1, n-1)), dtype=tf.float32)
+            m_zeros = tf.constant(np.zeros(shape=(1, n)), dtype=tf.float32)
+
+            # Triangular matrices over decay powers.
+            npd = np.zeros((n, n))
+            i1, i2 = np.indices(npd.shape)
             for k in xrange(n):
                 npd[i2-k == i1] = gap_decay ** k
             D = tf.constant(npd[1:n, 1:n], dtype=tf.float32)
@@ -169,9 +252,9 @@ class StringKernel(object):
             # Op but this seems to have some memory leaks in
             # TF 0.7.1
             Kp = []
-            Kp.append(tf.ones(shape=(n, n)))
+            Kp.append(tf.ones(shape=(None, n, n)))
             for i in xrange(1, order):
-                aux1 = tf.mul(S[:n-1, :n-1], Kp[i-1][:n-1, :n-1])
+                aux1 = tf.mul(S[:n-1, :n-1], Kp[i-1][:, :n-1, :n-1])
                 aux2 = tf.transpose(tf.matmul(aux1, D) * match_decay_sq)
                 aux3 = tf.concat(0, [n_zeros, aux2])
                 aux4 = tf.transpose(tf.matmul(aux3, D))
@@ -216,6 +299,20 @@ class StringKernel(object):
             s2 = s2.T
         output = self.sess.run(self.result, feed_dict={self.mat1: s1, 
                                                        self.mat2: s2})
+        return output
+
+    def _k_tf_mat(self, s1, s_list2):
+        """
+        Calculates k over a string and a list of strings.
+        This is a Tensorflow version.
+        """
+        mat_list1 = []
+        mat_list2 = []
+        for _s in s_list2:
+            mat_list1.append(self._build_input_matrix(s1, self.maxlen).T)
+            mat_list2.append(self._build_input_matrix(_s, self.maxlen))
+        output = self.sess.run(self.result, feed_dict={self.mat_list1: mat_list1, 
+                                                       self.mat_list2: mat_list2})
         return output
 
     def _k_numpy(self, s1, s2):

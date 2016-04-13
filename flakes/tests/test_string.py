@@ -145,7 +145,7 @@ class StringKernelProfiling(unittest.TestCase):
         print inputs
         print result
 
-    #@unittest.skip('profiling')
+    @unittest.skip('profiling')
     def test_prof_4(self):
         self.k_tf.order_coefs = [0.1, 0.2, 0.4, 0.5, 0.7, 1, 1, 1] + 32 * [1.0]
         self.k_tf.gap_decay = 0.8
@@ -164,7 +164,7 @@ class StringKernelProfiling(unittest.TestCase):
         print result2
         print after - before
 
-    #@unittest.skip('profiling')
+    @unittest.skip('profiling')
     def test_prof_5(self):
         self.k_tf.order_coefs = [0.1, 0.2, 0.4, 0.5, 0.7, 1, 1, 1] + 32 * [1.0]
         self.k_tf.gap_decay = 0.8
