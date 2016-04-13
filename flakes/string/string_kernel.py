@@ -158,9 +158,12 @@ class StringKernel(object):
             # Triangular matrices over decay powers.
             npd = np.zeros((n, n))
             i1, i2 = np.indices(npd.shape)
-            for k in xrange(n):
-                npd[i2-k == i1] = gap_decay ** k
-            D = tf.constant(npd[1:n, 1:n], dtype=tf.float32)
+            #for k in xrange(n):
+            #    npd[i2-k == i1] = gap_decay ** k
+            #D = tf.constant(npd[1:n, 1:n], dtype=tf.float32)
+            for k in xrange(n-1):
+                npd[i2-k-1 == i1] = gap_decay ** k
+            D = tf.constant(npd, dtype=tf.float32)
 
             # Initialize Kp, one for each n-gram order (including 0)
             ones = tf.ones(shape=(1, n, n))
@@ -179,16 +182,20 @@ class StringKernel(object):
             a = Kp.read(0)
             acc_Kp = acc_Kp.write(0, a)
             def _update_Kp(acc_Kp, a, S, i):
-                aux1 = tf.mul(S, a[:n-1, :n-1])
+                #aux1 = tf.mul(S, a[:n-1, :n-1])
+                #aux2 = tf.transpose(tf.matmul(aux1, D) * match_decay_sq)
+                #aux3 = tf.concat(0, [n_zeros, aux2])
+                #aux4 = tf.transpose(tf.matmul(aux3, D))
+                #a = tf.concat(0, [m_zeros, aux4])
+                aux1 = tf.mul(S, a)
                 aux2 = tf.transpose(tf.matmul(aux1, D) * match_decay_sq)
-                aux3 = tf.concat(0, [n_zeros, aux2])
-                aux4 = tf.transpose(tf.matmul(aux3, D))
-                a = tf.concat(0, [m_zeros, aux4])
+                a = tf.transpose(tf.matmul(aux2, D))
                 i += 1
                 acc_Kp = acc_Kp.write(i, a)
                 return [acc_Kp, a, S, i]
             cond = lambda _1, _2, _3, i: i < order
-            loop_vars = [acc_Kp, a, S[:n-1, :n-1], i]
+            #loop_vars = [acc_Kp, a, S[:n-1, :n-1], i]
+            loop_vars = [acc_Kp, a, S, i]
             final_Kp, _, _, _ = cfops.While(cond=cond, body=_update_Kp, 
                                             loop_vars=loop_vars)
             final_Kp = final_Kp.pack()
