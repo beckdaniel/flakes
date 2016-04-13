@@ -120,7 +120,6 @@ class StringKernel(object):
                         result[i, j] = self._k_numpy(x1[0], x2[0])
                     elif self.mode == 'slow':
                         result[i, j] = self._k_slow(x1[0], x2[0])
-            print i
         # If we are in TF mode we close the session
         if self.mode == 'tf':
             self.sess.close()
@@ -158,9 +157,9 @@ class StringKernel(object):
             # Triangular matrices over decay powers.
             npd = np.zeros((n, n))
             i1, i2 = np.indices(npd.shape)
-            for k in xrange(n):
-                npd[i2-k == i1] = gap_decay ** k
-            D = tf.constant(npd[1:n, 1:n], dtype=tf.float32)
+            for k in xrange(n-1):
+                npd[i2-k-1 == i1] = gap_decay ** k
+            D = tf.constant(npd, dtype=tf.float32)
 
             # Initialize Kp
             # We know the shape of Kp before building the graph
@@ -171,11 +170,10 @@ class StringKernel(object):
             Kp = []
             Kp.append(tf.ones(shape=(n, n)))
             for i in xrange(1, order):
-                aux1 = tf.mul(S[:n-1, :n-1], Kp[i-1][:n-1, :n-1])
+                aux1 = tf.mul(S, Kp[i-1])
                 aux2 = tf.transpose(tf.matmul(aux1, D) * match_decay_sq)
-                aux3 = tf.concat(0, [n_zeros, aux2])
-                aux4 = tf.transpose(tf.matmul(aux3, D))
-                Kp.append(tf.concat(0, [m_zeros, aux4]))
+                aux3 = tf.transpose(tf.matmul(aux2, D))
+                Kp.append(aux3)
 
             # Final calculation. "result" contains the final kernel value.
             # Because our Kps are in a list we can't use vectorization
