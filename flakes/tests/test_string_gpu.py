@@ -37,3 +37,7 @@ class GPUStringKernelProfiling(unittest.TestCase):
         after = datetime.datetime.now()
         print result2
         print after - before
+
+
+if __name__ == "__main__":
+    unittest.main()

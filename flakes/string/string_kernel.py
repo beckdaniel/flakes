@@ -120,7 +120,7 @@ class StringKernel(object):
                         result[i, j] = self._k_numpy(x1[0], x2[0])
                     elif self.mode == 'slow':
                         result[i, j] = self._k_slow(x1[0], x2[0])
-        
+            print i
         # If we are in TF mode we close the session
         if self.mode == 'tf':
             self.sess.close()
