@@ -27,12 +27,12 @@ class GPUStringKernelProfiling(unittest.TestCase):
             result2 = self.k_tf.k(self.s1, self.s2)
         print result2
 
-    #@unittest.skip('profiling')
+    @unittest.skip('profiling')
     def test_prof_5_gpu(self):
         self.k_tf.order_coefs = [0.1, 0.2, 0.4, 0.5, 0.7, 1, 1, 1] + 32 * [1.0]
         self.k_tf.gap_decay = 0.8
         self.k_tf.match_decay = 0.8
-        X = [[self.s1]] * 50
+        X = [[self.s1]] * 200
         #X2 = [[self.s2]] * 5
         before = datetime.datetime.now()
         result2 = self.k_tf.K(X)#, X2)
@@ -43,10 +43,10 @@ class GPUStringKernelProfiling(unittest.TestCase):
 
     #@unittest.skip('profiling')
     def test_prof_5_gpu_row(self):
-        self.k_tf.order_coefs = [0.1, 0.2, 0.4, 0.5, 0.7, 1, 1, 1] + 32 * [1.0]
-        self.k_tf.gap_decay = 0.8
-        self.k_tf.match_decay = 0.8
-        X = [[self.s1]] * 50
+        self.k_tf_row.order_coefs = [0.1, 0.2, 0.4, 0.5, 0.7, 1, 1, 1]# + 32 * [1.0]
+        self.k_tf_row.gap_decay = 0.8
+        self.k_tf_row.match_decay = 0.8
+        X = [[self.s1]] * 800
         before = datetime.datetime.now()
         result2 = self.k_tf_row.K(X)#, X2)
         after = datetime.datetime.now()

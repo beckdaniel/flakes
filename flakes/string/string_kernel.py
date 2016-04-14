@@ -48,7 +48,7 @@ class StringKernel(object):
         self.device = device
         if 'gpu' in device:
             self.gpu_config = tf.ConfigProto(
-                gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.5),
+                gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=1.0),
                 device_count = {'gpu': 1}
             )
 
@@ -118,6 +118,7 @@ class StringKernel(object):
         if self.mode == 'tf-row':
             #result = self._k_tf_mat(X, X2)
             for i, x1 in enumerate(X):
+                print i
                 if gram:
                     row = X2[:i+1]
                 else:
