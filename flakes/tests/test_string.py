@@ -88,7 +88,7 @@ class StringKernelTests(unittest.TestCase):
         result2 = self.k_np.K(self.s1, self.s4)
         self.assertAlmostEqual(result1, result2, places=2)
 
-    def test_compara_row_based(self):
+    def test_compare_row_based(self):
         X = [[self.s1], [self.s2], [self.s3], [self.s4]]
         self.k_tf.order_coefs = [0.1, 0.2, 0.4, 0.5, 0.7]
         self.k_tf.decay = 0.8

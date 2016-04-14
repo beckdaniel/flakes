@@ -54,5 +54,17 @@ class GPUStringKernelProfiling(unittest.TestCase):
         print 'ROW-BASED'
         print after - before
 
+    def test_compare_row_based(self):
+        X = [[self.s1], [self.s2], [self.s3], [self.s4]]
+        self.k_tf.order_coefs = [0.1, 0.2, 0.4, 0.5, 0.7]
+        self.k_tf.decay = 0.8
+        result1 = self.k_tf.K(X)
+        self.k_tf_row.order_coefs = [0.1, 0.2, 0.4, 0.5, 0.7]
+        self.k_tf_row.decay = 0.8
+        result2 = self.k_tf_row.K(X)
+        print result1
+        print result2
+        self.assertAlmostEqual(np.sum(result1), np.sum(result2), places=7)
+
 if __name__ == "__main__":
     unittest.main()
