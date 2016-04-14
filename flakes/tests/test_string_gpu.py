@@ -14,6 +14,8 @@ class GPUStringKernelProfiling(unittest.TestCase):
         self.s4 = 'cgagatgccaatagagagagcgctgta'
         self.k_tf = flakes.string.StringKernel(device='/gpu:7')
         self.k_tf.alphabet = {elem: i for i, elem in enumerate(list(set(self.s1 + self.s2)))}
+        self.k_tf_row = flakes.string.StringKernel(device='/gpu:7', mode='tf-row')
+        self.k_tf_row.alphabet = {elem: i for i, elem in enumerate(list(set(self.s1 + self.s2)))}
 
     @unittest.skip('profiling')
     def test_prof_4_gpu(self):
@@ -30,12 +32,26 @@ class GPUStringKernelProfiling(unittest.TestCase):
         self.k_tf.order_coefs = [0.1, 0.2, 0.4, 0.5, 0.7, 1, 1, 1] + 32 * [1.0]
         self.k_tf.gap_decay = 0.8
         self.k_tf.match_decay = 0.8
-        X = [[self.s1]] * 5
-        X2 = [[self.s2]] * 5
+        X = [[self.s1]] * 50
+        #X2 = [[self.s2]] * 5
         before = datetime.datetime.now()
-        result2 = self.k_tf.K(X, X2)
+        result2 = self.k_tf.K(X)#, X2)
         after = datetime.datetime.now()
         print result2
+        print 'CELL-BASED'
+        print after - before
+
+    #@unittest.skip('profiling')
+    def test_prof_5_gpu_row(self):
+        self.k_tf.order_coefs = [0.1, 0.2, 0.4, 0.5, 0.7, 1, 1, 1] + 32 * [1.0]
+        self.k_tf.gap_decay = 0.8
+        self.k_tf.match_decay = 0.8
+        X = [[self.s1]] * 50
+        before = datetime.datetime.now()
+        result2 = self.k_tf_row.K(X)#, X2)
+        after = datetime.datetime.now()
+        print result2
+        print 'ROW-BASED'
         print after - before
 
 if __name__ == "__main__":
