@@ -18,6 +18,8 @@ class StringKernelTests(unittest.TestCase):
         self.k_np.alphabet = {'a': 0, 'c': 1, 'g': 2, 't': 3}
         self.k_tf = flakes.string.StringKernel()
         self.k_tf.alphabet = {'a': 0, 'c': 1, 'g': 2, 't': 3}
+        self.k_tf_row = flakes.string.StringKernel(mode='tf-row')
+        self.k_tf_row.alphabet = {'a': 0, 'c': 1, 'g': 2, 't': 3}
         
     def test_sk_slow_1(self):
         self.k_slow.order_coefs = [1.] * 5
@@ -85,7 +87,18 @@ class StringKernelTests(unittest.TestCase):
         self.k_np.decay = 0.8
         result2 = self.k_np.K(self.s1, self.s4)
         self.assertAlmostEqual(result1, result2, places=2)
-        
+
+    def test_compara_row_based(self):
+        X = [[self.s1], [self.s2], [self.s3], [self.s4]]
+        self.k_tf.order_coefs = [0.1, 0.2, 0.4, 0.5, 0.7]
+        self.k_tf.decay = 0.8
+        result1 = self.k_tf.K(X)
+        self.k_tf_row.order_coefs = [0.1, 0.2, 0.4, 0.5, 0.7]
+        self.k_tf_row.decay = 0.8
+        result2 = self.k_tf_row.K(X)
+        print result1
+        print result2
+        self.assertAlmostEqual(np.sum(result1), np.sum(result2), places=7)
 
 #@unittest.skip('profiling')
 class StringKernelProfiling(unittest.TestCase):

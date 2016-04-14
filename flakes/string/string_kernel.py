@@ -171,10 +171,7 @@ class StringKernel(object):
             S = tf.matmul(tf.transpose(self.mat1), self.mat2)
 
             # Initilazing auxiliary variables.
-            # The zero vectors are used for padding inside While.
             match_decay_sq = match_decay * match_decay
-            n_zeros = tf.constant(np.zeros(shape=(1, n-1)), dtype=tf.float32)
-            m_zeros = tf.constant(np.zeros(shape=(1, n)), dtype=tf.float32)
 
             # Triangular matrices over decay powers.
             npd = np.zeros((n, n))
@@ -183,33 +180,42 @@ class StringKernel(object):
                 npd[i2-k-1 == i1] = gap_decay ** k
             D = tf.constant(npd, dtype=tf.float32)
 
-            # Initialize Kp
-            # We know the shape of Kp before building the graph
-            # so we can use a "static" list of Ops here.
-            # A more elegant solution would involve some scan-like
-            # Op but this seems to have some memory leaks in
-            # TF 0.7.1
-            Kp = []
-            Kp.append(tf.ones(shape=(n, n)))
-            for i in xrange(1, order):
-                aux1 = tf.mul(S, Kp[i-1])
+            # Initialize Kp, one for each n-gram order (including 0)
+            initial_Kp = tf.ones(shape=(order+1, n, n))
+            Kp = taops.TensorArray(dtype=initial_Kp.dtype, size=order+1,
+                                   tensor_array_name="Kp")
+            Kp = Kp.unpack(initial_Kp)
+
+            # Auxiliary Kp for using in While.
+            acc_Kp = taops.TensorArray(dtype=initial_Kp.dtype, size=order+1,
+                                   tensor_array_name="ret_Kp")
+
+            # Main loop, where Kp values are calculated.
+            i = tf.constant(0)
+            a = Kp.read(0)
+            acc_Kp = acc_Kp.write(0, a)
+            def _update_Kp(acc_Kp, a, S, i):
+                aux1 = tf.mul(S, a)
                 aux2 = tf.transpose(tf.matmul(aux1, D) * match_decay_sq)
-                aux3 = tf.transpose(tf.matmul(aux2, D))
-                Kp.append(aux3)
+                a = tf.transpose(tf.matmul(aux2, D))
+                i += 1
+                acc_Kp = acc_Kp.write(i, a)
+                return [acc_Kp, a, S, i]
+            cond = lambda _1, _2, _3, i: i < order
+            loop_vars = [acc_Kp, a, S, i]
+            final_Kp, _, _, _ = cfops.While(cond=cond, body=_update_Kp, 
+                                            loop_vars=loop_vars)
+            final_Kp = final_Kp.pack()
 
-            # Final calculation. "result" contains the final kernel value.
-            # Because our Kps are in a list we can't use vectorization
-            # over "i" anymore... Oh well...
-            results = []
-            for i in xrange(order):
-                coef = self.order_coefs[i]
-                aux5 = S * match_decay_sq
-                aux6 = tf.mul(aux5, Kp[i])
-                aux7 = tf.reduce_sum(aux6)
-                results.append(coef * aux7)
-            self.result = tf.add_n(results)
+            # Final calculation. We gather all Kps and
+            # multiply then by their coeficients.
+            mul1 = S * final_Kp[:order, :, :]
+            sum1 = tf.reduce_sum(mul1, 1)
+            Ki = tf.reduce_sum(sum1, 1, keep_dims=True) * match_decay_sq
+            coefs = tf.convert_to_tensor([self.order_coefs])
+            self.result = tf.matmul(coefs, Ki)
 
-    def _build_graph_mat(self, n):
+    def _build_graph_row(self, n):
         """
         Builds the graph for TF calculation. This should
         be usually called only once but can be called again
@@ -230,47 +236,66 @@ class StringKernel(object):
             self.mat_list1 = tf.placeholder("float", [None, n, None])
             self.mat_list2 = tf.placeholder("float", [None, None, n])
             S = tf.batch_matmul(self.mat_list1, self.mat_list2)
-            batch_size = S.get_shape()
+            batch_size = tf.shape(self.mat_list1)[0]
 
             # Initilazing auxiliary variables.
-            # The zero vectors are used for padding inside While.
             match_decay_sq = match_decay * match_decay
-            n_zeros = tf.constant(np.zeros(shape=(1, n-1)), dtype=tf.float32)
-            m_zeros = tf.constant(np.zeros(shape=(1, n)), dtype=tf.float32)
 
             # Triangular matrices over decay powers.
             npd = np.zeros((n, n))
             i1, i2 = np.indices(npd.shape)
-            for k in xrange(n):
-                npd[i2-k == i1] = gap_decay ** k
-            D = tf.constant(npd[1:n, 1:n], dtype=tf.float32)
+            for k in xrange(n-1):
+                npd[i2-k-1 == i1] = gap_decay ** k
+            D = tf.constant(npd, dtype=tf.float32)
 
-            # Initialize Kp
-            # We know the shape of Kp before building the graph
-            # so we can use a "static" list of Ops here.
-            # A more elegant solution would involve some scan-like
-            # Op but this seems to have some memory leaks in
-            # TF 0.7.1
-            Kp = []
-            Kp.append(tf.ones(shape=(None, n, n)))
-            for i in xrange(1, order):
-                aux1 = tf.mul(S[:n-1, :n-1], Kp[i-1][:, :n-1, :n-1])
-                aux2 = tf.transpose(tf.matmul(aux1, D) * match_decay_sq)
-                aux3 = tf.concat(0, [n_zeros, aux2])
-                aux4 = tf.transpose(tf.matmul(aux3, D))
-                Kp.append(tf.concat(0, [m_zeros, aux4]))
+            # Initialize Kp, one for each n-gram order (including 0)
+            Kp_shape = tf.pack([order+1, batch_size, n, n])
+            initial_Kp = tf.fill(Kp_shape, 1.0)
+            Kp = taops.TensorArray(dtype=initial_Kp.dtype, size=order+1,
+                                   tensor_array_name="Kp")
+            Kp = Kp.unpack(initial_Kp)
 
-            # Final calculation. "result" contains the final kernel value.
-            # Because our Kps are in a list we can't use vectorization
-            # over "i" anymore... Oh well...
-            results = []
-            for i in xrange(order):
-                coef = self.order_coefs[i]
-                aux5 = S * match_decay_sq
-                aux6 = tf.mul(aux5, Kp[i])
-                aux7 = tf.reduce_sum(aux6)
-                results.append(coef * aux7)
-            self.result = tf.add_n(results)
+            # Auxiliary Kp for using in While.
+            acc_Kp = taops.TensorArray(dtype=initial_Kp.dtype, size=order+1,
+                                   tensor_array_name="ret_Kp")
+
+            # Main loop, where Kp values are calculated.
+            i = tf.constant(0)
+            a = Kp.read(0)
+            acc_Kp = acc_Kp.write(0, a)
+            #print [batch_size * n, n]
+            def _update_Kp(acc_Kp, a, S, i):
+                aux1 = tf.mul(S, a)
+                #aux2 = tf.batch_matmul(aux1, D) * match_decay_sq
+                #aux3 = tf.transpose(aux2, perm=[0, 2, 1])
+                #aux4 = tf.batch_matmul(aux3, D)
+                #a = tf.transpose(aux4, perm=[0, 2, 1])
+                #shape1 = tf.mul(batch_size, n)
+                aux2 = tf.reshape(aux1, tf.pack([batch_size * n, n]))
+                aux3 = tf.matmul(aux2, D) * match_decay_sq
+                aux4 = tf.reshape(aux3, tf.pack([batch_size, n, n]))
+                aux5 = tf.transpose(aux4, perm=[0, 2, 1])
+                aux6 = tf.reshape(aux5, tf.pack([batch_size * n, n]))
+                aux7 = tf.matmul(aux6, D)
+                aux8 = tf.reshape(aux7, tf.pack([batch_size, n, n]))
+                a = tf.transpose(aux8, perm=[0, 2, 1])
+                i += 1
+                acc_Kp = acc_Kp.write(i, a)
+                return [acc_Kp, a, S, i]
+            cond = lambda _1, _2, _3, i: i < order
+            loop_vars = [acc_Kp, a, S, i]
+            final_Kp, _, _, _ = cfops.While(cond=cond, body=_update_Kp, 
+                                            loop_vars=loop_vars)
+            final_Kp = final_Kp.pack()
+
+            # Final calculation. We gather all Kps and
+            # multiply then by their coeficients.
+            mul1 = S * final_Kp[:order, :, :, :]
+            sum1 = tf.reduce_sum(mul1, 2)
+            Ki = tf.reduce_sum(sum1, 2, keep_dims=True) * match_decay_sq
+            Ki = tf.squeeze(Ki, squeeze_dims=[2])
+            coefs = tf.convert_to_tensor([self.order_coefs])
+            self.result = tf.matmul(coefs, Ki)
 
     def _build_input_matrix(self, s, l):
         """
@@ -301,7 +326,7 @@ class StringKernel(object):
                                                        self.mat2: s2})
         return output
 
-    def _k_tf_mat(self, s1, s_list2):
+    def _k_tf_row(self, s1, s_list2):
         """
         Calculates k over a string and a list of strings.
         This is a Tensorflow version.
@@ -309,8 +334,8 @@ class StringKernel(object):
         mat_list1 = []
         mat_list2 = []
         for _s in s_list2:
-            mat_list1.append(self._build_input_matrix(s1, self.maxlen).T)
-            mat_list2.append(self._build_input_matrix(_s, self.maxlen))
+            mat_list1.append(self._build_input_matrix(s1[0], self.maxlen).T)
+            mat_list2.append(self._build_input_matrix(_s[0], self.maxlen))
         output = self.sess.run(self.result, feed_dict={self.mat_list1: mat_list1, 
                                                        self.mat_list2: mat_list2})
         return output
