@@ -4,6 +4,8 @@ from tensorflow.python.ops import control_flow_ops as cfops
 from tensorflow.python.ops import tensor_array_ops as taops
 import sys
 
+BATCH_SIZE = 500
+
 
 class StringKernel(object):
     """
@@ -123,7 +125,10 @@ class StringKernel(object):
                     row = X2[:i+1]
                 else:
                     row = X2
-                row_result = self._k_tf_row(x1, row)
+                row_result = np.zeros((1,0))
+                for j in xrange((i / BATCH_SIZE) + 1):
+                    partial_result = self._k_tf_row(x1, row[j*BATCH_SIZE:(j+1)*BATCH_SIZE])
+                    row_result = np.concatenate((row_result, partial_result), axis=1)
                 if gram:
                     result[i, :i+1] = row_result
                     if i > 0:
