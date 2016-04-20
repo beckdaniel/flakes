@@ -163,23 +163,25 @@ class StringKernel(object):
         if we update the maximum string length in our
         dataset.
         """
-
         order = self.order
         self.graph = tf.Graph()
         with self.graph.as_default(), tf.device(self.device):
-            gap_decay = tf.convert_to_tensor(self.gap_decay)
-            match_decay = tf.convert_to_tensor(self.match_decay)
-
             # Strings will be represented as matrices of
             # embeddings and the similarity is just
             # the dot product. Hard match is replicated
             # by using one-hot embeddings.
-            self.mat1 = tf.placeholder("float", [None, n])
-            self.mat2 = tf.placeholder("float", [None, n])
-            S = tf.matmul(tf.transpose(self.mat1), self.mat2)
+            self._mat1 = tf.placeholder("float", [None, n])
+            self._mat2 = tf.placeholder("float", [None, n])
+            S = tf.matmul(tf.transpose(self._mat1), self._mat2)
 
-            # Initilazing auxiliary variables.
-            match_decay_sq = match_decay * match_decay
+            # Kernel hyperparameters are also placeholders.
+            # The K function is responsible for tying the
+            # hyper values from class to this calculation
+            # and to update the hyper gradients.
+            self._gap = tf.placeholder("float", [])
+            self._match = tf.placeholder("float", [])
+            self._coefs = tf.placeholder("float", [1, order])
+            match_decay_sq = self._match ** 2
 
             # Triangular matrices over decay powers.
             power = np.ones((n, n))
@@ -191,7 +193,7 @@ class StringKernel(object):
                 tril[i2-k-1 == i1] = 1.0
             tf_tril = tf.constant(tril, dtype=tf.float32)
             tf_power = tf.constant(power, dtype=tf.float32)
-            gaps = tf.fill([n, n], gap_decay)
+            gaps = tf.fill([n, n], self._gap)
             #D = tf.constant(npd, dtype=tf.float32)
             #Daux = tf.mul(gaps, tril)
             #Daux = tf.Print(Daux, [Daux, power], message='Decays mastrix', summarize=50)
@@ -231,11 +233,11 @@ class StringKernel(object):
             mul1 = S * final_Kp[:order, :, :]
             sum1 = tf.reduce_sum(mul1, 1)
             Ki = tf.reduce_sum(sum1, 1, keep_dims=True) * match_decay_sq
-            coefs = tf.convert_to_tensor([self.order_coefs])
-            result = tf.matmul(coefs, Ki)
-            gap_gradients = tf.gradients(result, gap_decay)
-            match_gradients = tf.gradients(result, match_decay)
-            coef_gradients = tf.gradients(result, coefs)
+            #coefs = tf.convert_to_tensor([self.order_coefs])
+            result = tf.matmul(self._coefs, Ki)
+            gap_gradients = tf.gradients(result, self._gap)
+            match_gradients = tf.gradients(result, self._match)
+            coef_gradients = tf.gradients(result, self._coefs)
             #print decay_gradients
             #print result.get_shape()
             #print decay_gradients.get_shape()
@@ -352,8 +354,11 @@ class StringKernel(object):
             s2 = self._build_input_matrix(s2, self.maxlen)
         else:
             s2 = s2.T
-        output = self.sess.run(self.result, feed_dict={self.mat1: s1, 
-                                                       self.mat2: s2})
+        feed_dict = {self._mat1: s1, self._mat2: s2,
+                     self._gap: self.gap_decay, 
+                     self._match: self.match_decay,
+                     self._coefs: np.array(self.order_coefs)[None, :]}
+        output = self.sess.run(self.result, feed_dict=feed_dict)
         return output
 
     def _k_tf_row(self, s1, s_list2):
