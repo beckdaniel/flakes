@@ -1,10 +1,10 @@
 import flakes
 import unittest
 import numpy as np
-#import GPy
+import GPy
 import datetime
 
-
+@unittest.skip('profiling')
 class StringKernelTests(unittest.TestCase):
     
     def setUp(self):
@@ -100,7 +100,7 @@ class StringKernelTests(unittest.TestCase):
         print result2
         self.assertAlmostEqual(np.sum(result1), np.sum(result2), places=7)
 
-#@unittest.skip('profiling')
+@unittest.skip('profiling')
 class StringKernelProfiling(unittest.TestCase):
 
     def setUp(self):
@@ -177,7 +177,7 @@ class StringKernelProfiling(unittest.TestCase):
         print result2
         print after - before
 
-    @unittest.skip('profiling')
+    #@unittest.skip('profiling')
     def test_prof_5(self):
         self.k_tf.order_coefs = [0.1, 0.2, 0.4, 0.5, 0.7, 1, 1, 1] + 32 * [1.0]
         self.k_tf.gap_decay = 0.8
@@ -188,8 +188,8 @@ class StringKernelProfiling(unittest.TestCase):
         #self.k_np.order_coefs = [0.1, 0.2, 0.4, 0.5, 0.7, 1, 1, 1]
         #self.k_np.decay = 0.8
         #print "START PROF 4"
-        X = [[self.s1]] * 5
-        X2 = [[self.s2]] * 5
+        X = [[self.s1]] * 50
+        X2 = [[self.s2]] * 50
         before = datetime.datetime.now()
         result2 = self.k_tf.K(X, X2)
         after = datetime.datetime.now()
@@ -197,46 +197,3 @@ class StringKernelProfiling(unittest.TestCase):
         print after - before
 
 
-class GPyTests(unittest.TestCase):
-    
-    @unittest.skip('profiling')
-    def test_gpy_1(self):
-        data = np.loadtxt('flakes/tests/trial2', dtype=object, delimiter='\t')[:2]
-        inputs = data[:, 1:]
-        k = flakes.wrappers.gpy.GPyStringKernel(mode='numpy')
-        k.order = 30
-        k.order_coefs = [0.1, 0.7, 0.5, 0.3, 0.1] + ([0.1] * 25)
-        k.decay = 0.1
-        alphabet = list(set(''.join(inputs.flatten())))
-        k.alphabet = {elem: i for i, elem in enumerate(alphabet)}
-        for i in range(100):
-            print i
-            #result = k.K(inputs)
-            result = k.k(inputs[0][0], inputs[1][0])
-        print result
-
-    @unittest.skip('profiling')
-    def test_gpy_2(self):
-        data = np.loadtxt('flakes/tests/trial2', dtype=object, delimiter='\t')[:5]
-        inputs = data[:, 1:]
-        labels = data[:, :1]
-        k = flakes.wrappers.gpy.GPyStringKernel(mode='tf')
-        bias = GPy.kern.Bias(1)
-        bias['variance'] = 1700
-        k.order = 10
-        k.order_coefs = [0.9, 0.7, 0.5, 0.3, 0.1] + ([0.1] * 5)
-        k.decay = 0.1
-        alphabet = list(set(''.join(inputs.flatten())))
-        k.alphabet = {elem: i for i, elem in enumerate(alphabet)}
-
-        m = GPy.models.GPRegression(inputs, labels, kernel=k+bias)
-        print labels
-        print m
-        print k.maxlen
-        m.optimize(messages=True, max_iters=20)
-        print m
-        result = m.predict(inputs)
-        print result
-
-if __name__ == "__main__":
-    unittest.main()
