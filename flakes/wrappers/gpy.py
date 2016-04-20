@@ -8,13 +8,16 @@ class GPyStringKernel(StringKernel, Kern):
     """
     Flakes string kernel wrapped in a GPy API.
     """
-    def __init__(self, decay=1.0, order_coefs=[1.0], mode='tf', 
+    def __init__(self, gap_decay=1.0, match_decay=1.0,
+                 order_coefs=[1.0], mode='tf', 
                  active_dims=None, name='string'):
         Kern.__init__(self, 1, active_dims, name)
-        StringKernel.__init__(self, decay, order_coefs, mode)
-        self.decay = Param('decay', decay, Logexp())
+        StringKernel.__init__(self, gap_decay, match_decay,
+                              order_coefs, mode)
+        self.gap_decay = Param('gap_decay', gap_decay, Logexp())
+        self.match_decay = Param('match_decay', match_decay, Logexp())
         self.order_coefs = Param('coefs', order_coefs, Logexp())
-        self.order = len(order_coefs)
+        #self.order = len(order_coefs)
         # Select implementation
         if mode == 'slow':
             self.k = self._k_slow
@@ -23,12 +26,14 @@ class GPyStringKernel(StringKernel, Kern):
         elif mode == 'tf':
             self.k = self._k_tf
         self.graph = None
-        self.link_parameter(self.decay)
+        self.link_parameter(self.gap_decay)
+        self.link_parameter(self.match_decay)
         self.link_parameter(self.order_coefs)
-        self.decay.constrain_fixed(decay)
+        self.gap_decay.constrain_fixed(gap_decay)
+        self.match_decay.constrain_fixed(match_decay)
         self.order_coefs.constrain_fixed(order_coefs)
 
-    def K(self, X, X2=None):
+    def _K(self, X, X2=None):
         """
         Calculate the Gram matrix over two lists of strings.
         """
@@ -39,7 +44,7 @@ class GPyStringKernel(StringKernel, Kern):
         if self.graph is None:
             print self.graph
             print "BUILDING GRAPH"
-            self._build_graph()
+            self._build_graph(self.maxlen)
             print "GRAPH BUILT"
 
         if X2 is None:
@@ -59,7 +64,7 @@ class GPyStringKernel(StringKernel, Kern):
     def Kdiag(self, X):
         result = np.zeros(shape=(len(X),))
         for i, x1 in enumerate(X):
-            result[i] = self.k(x1[0], x1[0])
+            result[i] = self.K(x1[0], x1[0])
         return result
 
     def update_gradients_full(self, dL_dK, X, X2=None):
