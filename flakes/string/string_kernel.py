@@ -142,7 +142,9 @@ class StringKernel(object):
                         result[i, j] = result[j, i]
                     else:
                         if self.mode == 'tf':
-                            result[i, j] = self._k_tf(x1[0], x2[0])
+                            calc = self._k_tf(x1[0], x2[0])
+                            result[i, j] = calc[0]
+                            #print calc
                         elif self.mode == 'numpy':
                             result[i, j] = self._k_numpy(x1[0], x2[0])
                         elif self.mode == 'slow':
@@ -161,12 +163,12 @@ class StringKernel(object):
         if we update the maximum string length in our
         dataset.
         """
-        gap_decay = self.gap_decay
-        match_decay = self.match_decay
-        order = self.order
 
+        order = self.order
         self.graph = tf.Graph()
         with self.graph.as_default(), tf.device(self.device):
+            gap_decay = tf.convert_to_tensor(self.gap_decay)
+            match_decay = tf.convert_to_tensor(self.match_decay)
 
             # Strings will be represented as matrices of
             # embeddings and the similarity is just
@@ -180,11 +182,22 @@ class StringKernel(object):
             match_decay_sq = match_decay * match_decay
 
             # Triangular matrices over decay powers.
-            npd = np.zeros((n, n))
-            i1, i2 = np.indices(npd.shape)
+            power = np.ones((n, n))
+            tril = np.zeros((n, n))
+            i1, i2 = np.indices(power.shape)
             for k in xrange(n-1):
-                npd[i2-k-1 == i1] = gap_decay ** k
-            D = tf.constant(npd, dtype=tf.float32)
+                #npd[i2-k-1 == i1] = self.gap_decay ** k
+                power[i2-k-1 == i1] = k
+                tril[i2-k-1 == i1] = 1.0
+            tf_tril = tf.constant(tril, dtype=tf.float32)
+            tf_power = tf.constant(power, dtype=tf.float32)
+            gaps = tf.fill([n, n], gap_decay)
+            #D = tf.constant(npd, dtype=tf.float32)
+            #Daux = tf.mul(gaps, tril)
+            #Daux = tf.Print(Daux, [Daux, power], message='Decays mastrix', summarize=50)
+            D = tf.pow(tf.mul(gaps, tril), power)
+            #D = tf.Print(D, [D], message='Decay mastrix', summarize=50)
+            #print npd
 
             # Initialize Kp, one for each n-gram order (including 0)
             initial_Kp = tf.ones(shape=(order+1, n, n))
@@ -219,7 +232,18 @@ class StringKernel(object):
             sum1 = tf.reduce_sum(mul1, 1)
             Ki = tf.reduce_sum(sum1, 1, keep_dims=True) * match_decay_sq
             coefs = tf.convert_to_tensor([self.order_coefs])
-            self.result = tf.matmul(coefs, Ki)
+            result = tf.matmul(coefs, Ki)
+            gap_gradients = tf.gradients(result, gap_decay)
+            match_gradients = tf.gradients(result, match_decay)
+            coef_gradients = tf.gradients(result, coefs)
+            #print decay_gradients
+            #print result.get_shape()
+            #print decay_gradients.get_shape()
+            #all_stuff = tf.pack([result, decay_gradients, coef_gradients])
+            all_stuff = [result] + gap_gradients + match_gradients + coef_gradients
+            #all_stuff = [result]
+            #print all_stuff
+            self.result = all_stuff
 
     def _build_graph_row(self, n):
         """

@@ -4,7 +4,7 @@ import numpy as np
 import GPy
 import datetime
 
-@unittest.skip('profiling')
+#@unittest.skip('profiling')
 class StringKernelTests(unittest.TestCase):
     
     def setUp(self):
@@ -64,7 +64,7 @@ class StringKernelTests(unittest.TestCase):
         self.k_np.gap_decay = 0.8
         self.k_np.match_decay = 0.8
         result2 = self.k_np.K(self.s1, self.s2)
-        self.assertAlmostEqual(result1, result2)
+        self.assertAlmostEqual(result1, result2, places=4)
 
     def test_compare_2(self):
         self.k_tf.order_coefs = [0.1, 0.2, 0.4, 0.5, 0.7]
@@ -197,4 +197,5 @@ class StringKernelProfiling(unittest.TestCase):
         print result2
         print after - before
 
-
+if __name__ == "__main__":
+    unittest.main()
