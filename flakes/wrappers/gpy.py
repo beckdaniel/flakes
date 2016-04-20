@@ -33,6 +33,15 @@ class GPyStringKernel(StringKernel, Kern):
         self.match_decay.constrain_fixed(match_decay)
         self.order_coefs.constrain_fixed(order_coefs)
 
+    def update_gradients_full(self, dL_dK, X, X2=None):
+        if X2 is None: 
+            dL_dK = (dL_dK+dL_dK.T)/2
+        self.gap_decay.gradient = np.sum(self.gap_grads * dL_dK)
+        self.match_decay.gradient = np.sum(self.match_grads * dL_dK)
+        for i in xrange(order):
+            self.order_coefs[i].gradient = np.sum(self.coef_grads[:, :, i] * dL_dK)
+
+
     def _K(self, X, X2=None):
         """
         Calculate the Gram matrix over two lists of strings.

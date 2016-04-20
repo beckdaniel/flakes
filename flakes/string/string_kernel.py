@@ -43,7 +43,6 @@ class StringKernel(object):
         self.match_decay = match_decay
         self.order_coefs = order_coefs
         self.mode = mode
-
         # This is only used in TF mode
         self.graph = None
         self.maxlen = 0
@@ -117,6 +116,10 @@ class StringKernel(object):
             
         # All set up. Proceed with Gram matrix calculation.
         result = np.zeros(shape=(len(X), len(X2)))
+        self.gap_grads = np.zeros(shape=(len(X), len(X2)))
+        self.match_grads = np.zeros(shape=(len(X), len(X2)))
+        self.coef_grads = np.zeros(shape=(len(X), len(X2), self.order))
+        
         if self.mode == 'tf-row':
             #result = self._k_tf_mat(X, X2)
             for i, x1 in enumerate(X):
@@ -144,6 +147,9 @@ class StringKernel(object):
                         if self.mode == 'tf':
                             calc = self._k_tf(x1[0], x2[0])
                             result[i, j] = calc[0]
+                            self.gap_grads[i, j] = calc[1]
+                            self.match_grads[i, j] = calc[2]
+                            self.coef_grads[i, j] = np.array(calc[3:])
                             #print calc
                         elif self.mode == 'numpy':
                             result[i, j] = self._k_numpy(x1[0], x2[0])
