@@ -29,17 +29,27 @@ class GPyStringKernel(StringKernel, Kern):
         self.link_parameter(self.gap_decay)
         self.link_parameter(self.match_decay)
         self.link_parameter(self.order_coefs)
-        self.gap_decay.constrain_fixed(gap_decay)
-        self.match_decay.constrain_fixed(match_decay)
-        self.order_coefs.constrain_fixed(order_coefs)
+        #self.gap_decay.constrain_fixed(gap_decay)
+        #self.match_decay.constrain_fixed(match_decay)
+        #self.order_coefs.constrain_fixed(order_coefs)
 
     def update_gradients_full(self, dL_dK, X, X2=None):
         if X2 is None: 
             dL_dK = (dL_dK+dL_dK.T)/2
         self.gap_decay.gradient = np.sum(self.gap_grads * dL_dK)
         self.match_decay.gradient = np.sum(self.match_grads * dL_dK)
-        for i in xrange(order):
-            self.order_coefs[i].gradient = np.sum(self.coef_grads[:, :, i] * dL_dK)
+        for i in xrange(self.order):
+            self.order_coefs.gradient[i] = np.sum(self.coef_grads[:, :, i] * dL_dK)
+        #print ''
+        #print 'GAP GRADS'
+        #print self.gap_grads
+        #print ''
+        #print 'MATCH GRADS'
+        #print self.match_grads
+        #print ''
+        #print 'DLDK'
+        #print dL_dK
+        #print ''
 
 
     def _K(self, X, X2=None):
@@ -76,6 +86,4 @@ class GPyStringKernel(StringKernel, Kern):
             result[i] = self.K(x1[0], x1[0])
         return result
 
-    def update_gradients_full(self, dL_dK, X, X2=None):
-        pass
         

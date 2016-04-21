@@ -360,9 +360,17 @@ class StringKernel(object):
             s2 = self._build_input_matrix(s2, self.maxlen)
         else:
             s2 = s2.T
+        if isinstance(self.gap_decay, np.ndarray):
+            gap = self.gap_decay[0]
+        else:
+            gap = self.gap_decay
+        if isinstance(self.match_decay, np.ndarray):
+            match = self.match_decay[0]
+        else:
+            match = self.match_decay
         feed_dict = {self._mat1: s1, self._mat2: s2,
-                     self._gap: self.gap_decay, 
-                     self._match: self.match_decay,
+                     self._gap: gap, 
+                     self._match: match,
                      self._coefs: np.array(self.order_coefs)[None, :]}
         output = self.sess.run(self.result, feed_dict=feed_dict)
         return output
