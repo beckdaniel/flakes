@@ -6,6 +6,7 @@ from sk_tf import TFStringKernel
 from sk_tf_batch import TFBatchStringKernel
 from sk_numpy import NumpyStringKernel
 from sk_naive import NaiveStringKernel
+from sk_util import build_one_hot
 
 
 class StringKernel(object):
@@ -37,20 +38,28 @@ class StringKernel(object):
     """
 
     def __init__(self, gap_decay=1.0, match_decay=1.0,
-                 order_coefs=[1.0], mode='tf', device='/cpu:0'):
+                 order_coefs=[1.0], mode='tf', 
+                 embs=None, alphabet=None, device='/cpu:0'):
+        if (embs is None) and (alphabet is None):
+            raise ValueError("You need to provide either an embedding" + 
+                             " dictionary through \"embs\" or a list" +
+                             " of symbols through \"alphabet\".")
+        # In case we have an alphabet we build
+        # one-hot encodings as the embeddings, i.e.,
+        # we assume hard match between symbols.
+        if embs is None:
+            embs = build_one_hot(alphabet)
+        self.gap_decay = gap_decay
+        self.match_decay = match_decay
+        self.order_coefs = order_coefs
         if mode == 'tf':
-            self._implementation = TFStringKernel(gap_decay, match_decay,
-                                                  order_coefs, device)
+            self._implementation = TFStringKernel(embs, device)
         elif mode == 'tf-batch':
-            self._implementation = TFBathcStringKernel(gap_decay, match_decay,
-                                                       order_coefs, device)
+            self._implementation = TFBatchStringKernel(embs, device)
         elif mode == 'numpy':
-            self._implementation = NumpyStringKernel(gap_decay, match_decay,
-                                                     order_coefs)
+            self._implementation = NumpyStringKernel(embs)
         elif mode == 'naive':
-            self._implementation = NaiveStringKernel(gap_decay, match_decay,
-                                                     order_coefs)
-
+            self._implementation = NaiveStringKernel(embs)
 
     @property
     def order(self):
@@ -58,6 +67,9 @@ class StringKernel(object):
         Kernel ngram order, defined implicitly.
         """
         return len(self.order_coefs)
+
+    def _get_params(self):
+        return [self.gap_decay, self.match_decay, self.order_coefs]
 
     def K(self, X, X2=None):
         """
@@ -81,7 +93,7 @@ class StringKernel(object):
         if not (isinstance(X2, list) or isinstance(X2, np.ndarray)):
             X2 = [[X2]]
 
-        params = [self.gap_decay[0], self.match_decay[0], self.order_coefs]
+        params = self._get_params()
         result = self._implementation.K(X, X2, gram, params)
         k_result = result[0]
         self.gap_grads = result[1]
@@ -148,38 +160,5 @@ class StringKernel(object):
                         result[:i+1, i] = row_result
                 else:
                     result[i] = row_result              
-        else:
-            for i, x1 in enumerate(X):
-                for j, x2 in enumerate(X2):
-                    if gram and (j < i):
-                        result[i, j] = result[j, i]
-                    else:
-                        if self.mode == 'tf':
-                            calc = self._k_tf(x1[0], x2[0])
-                            result[i, j] = calc[0]
-                            self.gap_grads[i, j] = calc[1]
-                            self.match_grads[i, j] = calc[2]
-                            self.coef_grads[i, j] = np.array(calc[3:])
-                            #print calc
-                        elif self.mode == 'numpy':
-                            result[i, j] = self._k_numpy(x1[0], x2[0])
-                        elif self.mode == 'slow':
-                            result[i, j] = self._k_slow(x1[0], x2[0])
-        
-        # If we are in TF mode we close the session
-        if self.mode == 'tf' or self.mode == 'tf-row':
-            self.sess.close()
 
         return result
-
-    def _build_input_matrix(self, s, l):
-        """
-        Transform an input (string or list) into a
-        numpy matrix. Notice that we use an implicit
-        zero padding here when l > len(s).
-        """
-        dim = len(self.alphabet)
-        t = np.zeros(shape=(l, dim))
-        for i, ch in enumerate(s):
-            t[i, self.alphabet[ch]] = 1.0
-        return t.T
