@@ -77,13 +77,93 @@ class StringKernelTests(unittest.TestCase):
 
     def test_compare_3(self):
         self.k_tf.order_coefs = [0.1, 0.2, 0.4, 0.5, 0.7]
-        self.k_tf.decay = 0.8
+        self.k_tf.gap_decay = 0.8
+        self.k_tf.match_decay = 0.8
         result1 = self.k_tf.K(self.s1, self.s4)
 
         self.k_np.order_coefs = [0.1, 0.2, 0.4, 0.5, 0.7]
-        self.k_np.decay = 0.8
+        self.k_np.gap_decay = 0.8
+        self.k_np.match_decay = 0.8
         result2 = self.k_np.K(self.s1, self.s4)
         self.assertAlmostEqual(result1, result2, places=2)
+
+    def test_gradient_gap_1(self):
+        #self.k_tf.order_coefs = [0.1, 0.2, 0.4, 0.5, 0.7]
+        self.k_tf.order_coefs = [0.1] * 2
+        self.k_tf.gap_decay = 0.8
+        self.k_tf.match_decay = 0.8
+        result = self.k_tf.K(self.s1, self.s2)
+        true_grads = self.k_tf.gap_grads
+
+        E = 1e-4
+        self.k_tf.gap_decay = 0.8 + E
+        g_result1 = self.k_tf.K(self.s1, self.s2)
+        self.k_tf.gap_decay = 0.8 - E
+        g_result2 = self.k_tf.K(self.s1, self.s2)
+        print g_result1
+        print g_result2
+        print true_grads
+
+        g_result = (g_result1 - g_result2) / (2 * E)
+        self.assertAlmostEqual(true_grads, g_result, places=2)
+
+    def test_gradient_match_1(self):
+        #self.k_tf.order_coefs = [0.1, 0.2, 0.4, 0.5, 0.7]
+        self.k_tf.order_coefs = [0.1] * 2
+        self.k_tf.gap_decay = 0.8
+        self.k_tf.match_decay = 0.8
+        result = self.k_tf.K(self.s1, self.s2)
+        true_grads = self.k_tf.match_grads
+
+        E = 1e-4
+        self.k_tf.match_decay = 0.8 + E
+        g_result1 = self.k_tf.K(self.s1, self.s2)
+        self.k_tf.match_decay = 0.8 - E
+        g_result2 = self.k_tf.K(self.s1, self.s2)
+        print g_result1
+        print g_result2
+        print true_grads
+
+        g_result = (g_result1 - g_result2) / (2 * E)
+        self.assertAlmostEqual(true_grads, g_result, places=2)
+
+    def test_gradient_coefs_1(self):
+        self.k_tf.order_coefs = [0.1] * 2
+        self.k_tf.gap_decay = 0.8
+        self.k_tf.match_decay = 0.8
+        result = self.k_tf.K(self.s1, self.s2)
+        true_grads = self.k_tf.coef_grads
+
+        E = 1e-4
+        self.k_tf.order_coefs = [0.1 + E, 0.1]
+        g_result1 = self.k_tf.K(self.s1, self.s2)
+        self.k_tf.order_coefs = [0.1 - E, 0.1]
+        g_result2 = self.k_tf.K(self.s1, self.s2)
+        print g_result1
+        print g_result2
+        print true_grads
+
+        g_result = (g_result1 - g_result2) / (2 * E)
+        self.assertAlmostEqual(true_grads[0][0][0], g_result[0][0], places=2)
+
+    def test_gradient_coefs_2(self):
+        self.k_tf.order_coefs = [0.1] * 2
+        self.k_tf.gap_decay = 0.8
+        self.k_tf.match_decay = 0.8
+        result = self.k_tf.K(self.s1, self.s2)
+        true_grads = self.k_tf.coef_grads
+
+        E = 1e-4
+        self.k_tf.order_coefs = [0.1, 0.1 + E]
+        g_result1 = self.k_tf.K(self.s1, self.s2)
+        self.k_tf.order_coefs = [0.1, 0.1 - E]
+        g_result2 = self.k_tf.K(self.s1, self.s2)
+        print g_result1
+        print g_result2
+        print true_grads
+
+        g_result = (g_result1 - g_result2) / (2 * E)
+        self.assertAlmostEqual(true_grads[0][0][1], g_result[0][0], places=2)
 
     @unittest.skip('batch-based is not 100% done')
     def test_compare_row_based(self):
@@ -99,7 +179,7 @@ class StringKernelTests(unittest.TestCase):
         self.assertAlmostEqual(np.sum(result1), np.sum(result2), places=7)
 
 
-#@unittest.skip('profiling')
+@unittest.skip('profiling')
 class StringKernelProfiling(unittest.TestCase):
 
     def setUp(self):

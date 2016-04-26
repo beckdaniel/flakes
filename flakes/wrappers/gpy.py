@@ -10,21 +10,14 @@ class GPyStringKernel(StringKernel, Kern):
     """
     def __init__(self, gap_decay=1.0, match_decay=1.0,
                  order_coefs=[1.0], mode='tf', 
-                 active_dims=None, name='string'):
+                 active_dims=None, name='string',
+                 alphabet=None):
         Kern.__init__(self, 1, active_dims, name)
         StringKernel.__init__(self, gap_decay, match_decay,
-                              order_coefs, mode)
+                              order_coefs, mode, alphabet=alphabet)
         self.gap_decay = Param('gap_decay', gap_decay, Logexp())
         self.match_decay = Param('match_decay', match_decay, Logexp())
         self.order_coefs = Param('coefs', order_coefs, Logexp())
-        #self.order = len(order_coefs)
-        # Select implementation
-        if mode == 'slow':
-            self.k = self._k_slow
-        elif mode == 'numpy':
-            self.k = self._k_numpy
-        elif mode == 'tf':
-            self.k = self._k_tf
         self.graph = None
         self.link_parameter(self.gap_decay)
         self.link_parameter(self.match_decay)
@@ -40,45 +33,6 @@ class GPyStringKernel(StringKernel, Kern):
         self.match_decay.gradient = np.sum(self.match_grads * dL_dK)
         for i in xrange(self.order):
             self.order_coefs.gradient[i] = np.sum(self.coef_grads[:, :, i] * dL_dK)
-        #print ''
-        #print 'GAP GRADS'
-        #print self.gap_grads
-        #print ''
-        #print 'MATCH GRADS'
-        #print self.match_grads
-        #print ''
-        #print 'DLDK'
-        #print dL_dK
-        #print ''
-
-
-    def _K(self, X, X2=None):
-        """
-        Calculate the Gram matrix over two lists of strings.
-        """
-        if X2 is not None:
-            self.maxlen = max([len(x[0]) for x in np.concatenate((X, X2))])
-        else:
-            self.maxlen = max([len(x[0]) for x in X])
-        if self.graph is None:
-            print self.graph
-            print "BUILDING GRAPH"
-            self._build_graph(self.maxlen)
-            print "GRAPH BUILT"
-
-        if X2 is None:
-            X2 = X
-            symm = True
-        else:
-            symm = False
-        result = np.zeros(shape=(len(X), len(X2)))
-        for i, x1 in enumerate(X):
-            for j, x2 in enumerate(X2):
-                if symm and (j < i):
-                    result[i, j] = result[j, i]
-                else:
-                    result[i, j] = self.k(x1[0], x2[0])
-        return result
 
     def Kdiag(self, X):
         result = np.zeros(shape=(len(X),))
@@ -86,4 +40,9 @@ class GPyStringKernel(StringKernel, Kern):
             result[i] = self.K(x1[0], x1[0])
         return result
 
+    def _get_params(self):
+        """
+        Overriding this because of the way GPy handles parameters.
+        """
+        return [self.gap_decay[0], self.match_decay[0], self.order_coefs]
         
