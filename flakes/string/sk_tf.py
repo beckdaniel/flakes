@@ -17,9 +17,15 @@ class TFStringKernel(object):
         self.maxlen = 0
         self.device = device
         if 'gpu' in device:
-            self.gpu_config = tf.ConfigProto(
+            self.tf_config = tf.ConfigProto(
                 gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=1.0),
                 device_count = {'gpu': 1}
+            )
+        elif 'cpu' in device:
+            self.tf_config = tf.ConfigProto(
+                use_per_session_threads = 1,
+                intra_op_parallelism_threads = 1,
+                inter_op_parallelism_threads = 1,
             )
 
     def _k(self, s1, s2, params, sess):
@@ -136,10 +142,11 @@ class TFStringKernel(object):
             self.maxlen = maxlen
 
         # We also start a TF session
-        if 'gpu' in self.device:
-            sess = tf.Session(graph=self.graph, config=self.gpu_config)
-        else:
-            sess = tf.Session(graph=self.graph)
+        #if 'gpu' in self.device:
+        #    sess = tf.Session(graph=self.graph, config=self.tf_config)
+        #else:
+        #    sess = tf.Session(graph=self.graph)
+        sess = tf.Session(graph=self.graph, config=self.tf_config)
 
         # Initialize return values
         k_result = np.zeros(shape=(len(X), len(X2)))
