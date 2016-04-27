@@ -11,10 +11,11 @@ class GPyStringKernel(StringKernel, Kern):
     def __init__(self, gap_decay=1.0, match_decay=1.0,
                  order_coefs=[1.0], mode='tf', 
                  active_dims=None, name='string',
-                 alphabet=None):
+                 embs=None, alphabet=None):
         Kern.__init__(self, 1, active_dims, name)
         StringKernel.__init__(self, gap_decay, match_decay,
-                              order_coefs, mode, alphabet=alphabet)
+                              order_coefs, mode, embs=embs,
+                              alphabet=alphabet)
         self.gap_decay = Param('gap_decay', gap_decay, Logexp())
         self.match_decay = Param('match_decay', match_decay, Logexp())
         self.order_coefs = Param('coefs', order_coefs, Logexp())
