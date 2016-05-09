@@ -18,15 +18,15 @@ class TFStringKernel(object):
         self.device = device
         if 'gpu' in device:
             self.tf_config = tf.ConfigProto(
-                gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=1.0),
+                gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.8),
                 device_count = {'gpu': 1}
             )
-        elif 'cpu' in device:
-            self.tf_config = tf.ConfigProto(
-                use_per_session_threads = 1,
-                intra_op_parallelism_threads = 1,
-                inter_op_parallelism_threads = 1,
-            )
+        #elif 'cpu' in device:
+        #    self.tf_config = tf.ConfigProto(
+        #        use_per_session_threads = 1,
+        #        intra_op_parallelism_threads = 1,
+        #        inter_op_parallelism_threads = 1,
+        #    )
 
     def _k(self, s1, s2, params, sess):
         """
@@ -168,5 +168,6 @@ class TFStringKernel(object):
                     gap_grads[i, j] = result[1]
                     match_grads[i, j] = result[2]
                     coef_grads[i, j] = np.array(result[3:])
+            print i
         sess.close()
         return k_result, gap_grads, match_grads, coef_grads
