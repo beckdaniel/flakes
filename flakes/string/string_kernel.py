@@ -50,7 +50,7 @@ class StringKernel(object):
         self.device = device
         if 'gpu' in device:
             self.gpu_config = tf.ConfigProto(
-                gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=1.0),
+                gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.8),
                 device_count = {'gpu': 1}
             )
 
@@ -147,7 +147,7 @@ class StringKernel(object):
                             result[i, j] = self._k_numpy(x1[0], x2[0])
                         elif self.mode == 'slow':
                             result[i, j] = self._k_slow(x1[0], x2[0])
-        
+                print i
         # If we are in TF mode we close the session
         if self.mode == 'tf' or self.mode == 'tf-row':
             self.sess.close()
