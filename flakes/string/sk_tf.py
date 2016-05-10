@@ -23,9 +23,9 @@ class TFStringKernel(object):
             )
         elif 'cpu' in device:
             self.tf_config = tf.ConfigProto(
-                use_per_session_threads = 1,
-                intra_op_parallelism_threads = 1,
-                inter_op_parallelism_threads = 1,
+                use_per_session_threads = 4,
+                intra_op_parallelism_threads = 4,
+                inter_op_parallelism_threads = 4,
             )
 
     def _k(self, s1, s2, params, sess):
