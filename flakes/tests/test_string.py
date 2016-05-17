@@ -17,6 +17,7 @@ class StringKernelTests(unittest.TestCase):
         self.k_np = flakes.string.StringKernel(mode='numpy', alphabet=alphabet)
         self.k_tf = flakes.string.StringKernel(alphabet=alphabet)
         self.k_tf_row = flakes.string.StringKernel(mode='tf-batch', alphabet=alphabet)
+        self.k_tf_gram = flakes.string.StringKernel(mode='tf-gram', alphabet=alphabet)
         
     def test_sk_slow_1(self):
         self.k_slow.order_coefs = [1.] * 5
@@ -206,6 +207,18 @@ class StringKernelTests(unittest.TestCase):
 
         g_result = (g_result1 - g_result2) / (2 * E)
         self.assertAlmostEqual(np.sum(true_grads), np.sum(g_result), places=2)
+
+    def test_compare_gram_based(self):
+        X = [[self.s1], [self.s2], [self.s3], [self.s4]]
+        self.k_tf.order_coefs = [0.1, 0.2, 0.4, 0.5, 0.7]
+        self.k_tf.decay = 0.8
+        result1 = self.k_tf.K(X)
+        self.k_tf_row.order_coefs = [0.1, 0.2, 0.4, 0.5, 0.7]
+        self.k_tf_row.decay = 0.8
+        result2 = self.k_tf_gram.K(X)
+        print result1
+        print result2
+        self.assertAlmostEqual(np.sum(result1), np.sum(result2), places=7)
 
     @unittest.skip('batch-based is not 100% done')
     def test_compare_row_based(self):

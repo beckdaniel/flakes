@@ -4,6 +4,7 @@ from tensorflow.python.ops import control_flow_ops as cfops
 from tensorflow.python.ops import tensor_array_ops as taops
 from sk_tf import TFStringKernel
 from sk_tf_batch import TFBatchStringKernel
+from sk_tf_gram import TFGramStringKernel
 from sk_numpy import NumpyStringKernel
 from sk_naive import NaiveStringKernel
 from sk_util import build_one_hot
@@ -55,6 +56,8 @@ class StringKernel(object):
         self.order_coefs = order_coefs
         if mode == 'tf':
             self._implementation = TFStringKernel(embs, device)
+        elif mode == 'tf-gram':
+            self._implementation = TFGramStringKernel(embs, device)
         elif mode == 'tf-batch':
             self._implementation = TFBatchStringKernel(embs, device)
         elif mode == 'numpy':
