@@ -3,10 +3,13 @@ import unittest
 import numpy as np
 import GPy
 import datetime
+import sys
 
 
 #@unittest.skip('profiling')
 class StringKernelProfiling(unittest.TestCase):
+    DEVICE = '/cpu:0'
+
 
     def setUp(self):
         self.s1 = "Scientists throughout the world and all the friends of the late Baron Sir Ferdinand von Mueller, who was Government Botanist of Victoria, will be pleased to learn that his executors, the Rev. W. Potter, F.R.G.S., Alexander Buttner, and Hermann Buttner, are now making an effort to erect over the grave a monument worthy of the deceased savant's fame. The monument will be of grey granite, 23 feet in height."
@@ -16,7 +19,8 @@ class StringKernelProfiling(unittest.TestCase):
         alphabet = list(set(self.s1 + self.s2))
         self.k_slow = flakes.string.StringKernel(mode='slow', alphabet=alphabet)
         self.k_np = flakes.string.StringKernel(mode='numpy', alphabet=alphabet)
-        self.k_tf = flakes.string.StringKernel(alphabet=alphabet)
+        self.k_tf = flakes.string.StringKernel(alphabet=alphabet, device=self.DEVICE)
+        self.k_tf_gram = flakes.string.StringKernel(mode='tf-gram', alphabet=alphabet, device=self.DEVICE))
 
     @unittest.skip('profiling')
     def test_prof_1(self):
@@ -92,7 +96,7 @@ class StringKernelProfiling(unittest.TestCase):
 
         #self.k_np.order_coefs = [0.1, 0.2, 0.4, 0.5, 0.7, 1, 1, 1]
         #self.k_np.decay = 0.8
-        #print "START PROF 4"
+        print "START PROF NORMAL"
         X = [[self.s3]] * 20
         X2 = [[self.s4]] * 20
         before = datetime.datetime.now()
@@ -101,6 +105,29 @@ class StringKernelProfiling(unittest.TestCase):
         print result2
         print after - before
 
+    #@unittest.skip('profiling')
+    def test_prof_gram_1(self):
+        self.k_tf_gram.order_coefs = [0.1, 0.2, 0.4, 0.5, 0.7, 1, 1, 1] + 32 * [1.0]
+        self.k_tf_gram.gap_decay = 0.8
+        self.k_tf_gram.match_decay = 0.8
+        #result1 = self.k_tf.k(self.s1, self.s1)
+        #print result1
+
+        #self.k_np.order_coefs = [0.1, 0.2, 0.4, 0.5, 0.7, 1, 1, 1]
+        #self.k_np.decay = 0.8
+        print "START PROF GRAM"
+        X = [[self.s3]] * 20
+        X2 = [[self.s4]] * 20
+        before = datetime.datetime.now()
+        result2 = self.k_tf_gram.K(X, X2)
+        after = datetime.datetime.now()
+        print result2
+        print after - before
+
 
 if __name__ == "__main__":
+    if len(sys.argv) > 0:
+        if 'gpu' in sys.argv[0]:
+            StringKernelProfiling.DEVICE = sys.argv[0]
     unittest.main()
+    

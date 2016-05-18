@@ -185,7 +185,7 @@ class StringKernelTests(unittest.TestCase):
         print true_grads
 
         g_result = (g_result1 - g_result2) / (2 * E)
-        self.assertAlmostEqual(np.sum(true_grads), np.sum(g_result), places=2)
+        self.assertAlmostEqual(np.sum(true_grads)/100, np.sum(g_result)/100, places=2)
 
     def test_gradient_match_2(self):
         #self.k_tf.order_coefs = [0.1, 0.2, 0.4, 0.5, 0.7]
@@ -206,17 +206,19 @@ class StringKernelTests(unittest.TestCase):
         print true_grads
 
         g_result = (g_result1 - g_result2) / (2 * E)
-        self.assertAlmostEqual(np.sum(true_grads), np.sum(g_result), places=2)
+        self.assertAlmostEqual(np.sum(true_grads)/100, np.sum(g_result)/100, places=2)
 
     def test_compare_gram_based(self):
         X = [[self.s1], [self.s2], [self.s3], [self.s4]]
         self.k_tf.order_coefs = [0.1, 0.2, 0.4, 0.5, 0.7]
         self.k_tf.decay = 0.8
         result1 = self.k_tf.K(X)
-        self.k_tf_row.order_coefs = [0.1, 0.2, 0.4, 0.5, 0.7]
-        self.k_tf_row.decay = 0.8
+        self.k_tf_gram.order_coefs = [0.1, 0.2, 0.4, 0.5, 0.7]
+        self.k_tf_gram.decay = 0.8
         result2 = self.k_tf_gram.K(X)
+        print "NORMAL"
         print result1
+        print "GRAM"
         print result2
         self.assertAlmostEqual(np.sum(result1), np.sum(result2), places=7)
 

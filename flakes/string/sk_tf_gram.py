@@ -55,13 +55,12 @@ class TFGramStringKernel(object):
             self._coefs = tf.placeholder("float", [1, order])
             self._index1 = tf.placeholder("int32", [])
             self._index2 = tf.placeholder("int32", [])
-            match_sq = tf.squeeze(self._match) ** 2
+            match_sq = self._match ** 2
 
             # Select the inputs from the pre-loaded
             # dataset
             mat1 = tf.gather(tf_X, self._index1)
             mat2 = tf.gather(tf_X2, self._index2)
-            #S = tf.matmul(tf.transpose(mat1), mat2)
             S = tf.matmul(mat1, tf.transpose(mat2))
 
             # Triangular matrices over decay powers.
@@ -73,7 +72,7 @@ class TFGramStringKernel(object):
                 tril[i2-k-1 == i1] = 1.0
             tf_tril = tf.constant(tril, dtype=tf.float32)
             tf_power = tf.constant(power, dtype=tf.float32)
-            gaps = tf.fill([n, n], tf.squeeze(self._gap))
+            gaps = tf.fill([n, n], self._gap)
             D = tf.pow(tf.mul(gaps, tril), power)
 
             # Initialize Kp, one for each n-gram order (including 0)
@@ -91,7 +90,6 @@ class TFGramStringKernel(object):
             a = Kp.read(0)
             acc_Kp = acc_Kp.write(0, a)
             def _update_Kp(acc_Kp, a, S, i):
-                a = tf.Print(a, [a, S], message='inside while', summarize=200)
                 aux1 = tf.mul(S, a)
                 aux2 = tf.transpose(tf.matmul(aux1, D) * match_sq)
                 a = tf.transpose(tf.matmul(aux2, D))
@@ -113,8 +111,8 @@ class TFGramStringKernel(object):
             gap_grad = tf.gradients(k_result, self._gap)
             match_grad = tf.gradients(k_result, self._match)
             coefs_grad = tf.gradients(k_result, self._coefs)
-            #all_stuff = [k_result, gap_grad, match_grad, coefs_grad]
-            self.result = [k_result, k_result, k_result, k_result]
+            all_stuff = [k_result] + gap_grad + match_grad + coefs_grad
+            self.result = all_stuff
 
     def K(self, X, X2, gram, params):
         """
@@ -132,8 +130,6 @@ class TFGramStringKernel(object):
                 X = self._code_and_pad(X, maxlen)
                 self.maxlen = maxlen
                 self.gram_mode = True
-                #self.indices = np.array([[i, j] for i in range(len(X)) 
-                #                    for j in range(len(X)) if i <= j])
                 self._build_graph(maxlen, order, X)
         else: # We rebuild the graph, usually for predictions
             self.gram_mode = False
@@ -141,8 +137,6 @@ class TFGramStringKernel(object):
             X = self._code_and_pad(X, maxlen)
             X2 = self._code_and_pad(X2, maxlen)
             self.maxlen = maxlen
-            #self.indices = np.array([[i, j] for i in range(len(X)) 
-            #                    for j in range(len(X2))])
             self._build_graph(maxlen, order, X, X2)
 
         # Initialize return values
@@ -165,7 +159,7 @@ class TFGramStringKernel(object):
                                  self._match: params[1],
                                  self._coefs: np.array(params[2])[None, :],
                                  self._index1: i,
-                                 self._index2: i}
+                                 self._index2: j}
                     k_result, gap_grad, match_grad, coef_grad = sess.run(self.result,
                                                                          feed_dict=feed_dict)
                     k_results[i, j] = k_result
