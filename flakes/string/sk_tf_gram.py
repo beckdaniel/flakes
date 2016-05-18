@@ -30,7 +30,7 @@ class TFGramStringKernel(object):
                 inter_op_parallelism_threads = 4,
             )
 
-    def _build_graph(self, n, order, indices, X, X2=None):
+    def _build_graph(self, n, order, X, X2=None):
         """
         Builds the graph for TF calculation. This should
         be usually called only once but can be called again
@@ -45,7 +45,6 @@ class TFGramStringKernel(object):
             # Only feasible for small datasets though.
             tf_X = tf.constant(X, dtype=tf.float32)
             tf_X2 = tf.constant(X2, dtype=tf.float32)
-            tf_indices = tf.constant(indices, dtype=tf.uint8)
 
             # Kernel hyperparameters are also placeholders.
             # The K function is responsible for tying the
@@ -54,7 +53,16 @@ class TFGramStringKernel(object):
             self._gap = tf.placeholder("float", [])
             self._match = tf.placeholder("float", [])
             self._coefs = tf.placeholder("float", [1, order])
-            match_sq = self._match ** 2
+            self._index1 = tf.placeholder("int32", [])
+            self._index2 = tf.placeholder("int32", [])
+            match_sq = tf.squeeze(self._match) ** 2
+
+            # Select the inputs from the pre-loaded
+            # dataset
+            mat1 = tf.gather(tf_X, self._index1)
+            mat2 = tf.gather(tf_X2, self._index2)
+            #S = tf.matmul(tf.transpose(mat1), mat2)
+            S = tf.matmul(mat1, tf.transpose(mat2))
 
             # Triangular matrices over decay powers.
             power = np.ones((n, n))
@@ -65,66 +73,48 @@ class TFGramStringKernel(object):
                 tril[i2-k-1 == i1] = 1.0
             tf_tril = tf.constant(tril, dtype=tf.float32)
             tf_power = tf.constant(power, dtype=tf.float32)
-            gaps = tf.fill([n, n], self._gap)
+            gaps = tf.fill([n, n], tf.squeeze(self._gap))
             D = tf.pow(tf.mul(gaps, tril), power)
 
-            def _calc_k(index):
-                """
-                This will be called by map_fn.
-                """
-
-                # Strings will be represented as matrices of
-                # embeddings and the similarity is just
-                # the dot product. Hard match is replicated
-                # by using one-hot embeddings.
-                i1 = tf.slice(index, [0], [1])
-                i2 = tf.slice(index, [1], [1])
-                mat1 = tf.slice(tf_X, [i1], [1])
-                mat2 = tf.slice(tf_X2, [i2], [1])
-                S = tf.matmul(tf.transpose(mat1), mat2)
-
-                # Initialize Kp, one for each n-gram order (including 0)
-                initial_Kp = tf.ones(shape=(order+1, n, n))
-                Kp = taops.TensorArray(dtype=initial_Kp.dtype, size=order+1,
-                                       tensor_array_name="Kp")
-                Kp = Kp.unpack(initial_Kp)
+            # Initialize Kp, one for each n-gram order (including 0)
+            initial_Kp = tf.ones(shape=(order+1, n, n))
+            Kp = taops.TensorArray(dtype=initial_Kp.dtype, size=order+1,
+                                   tensor_array_name="Kp")
+            Kp = Kp.unpack(initial_Kp)
                 
-                # Auxiliary Kp for using in While.
-                acc_Kp = taops.TensorArray(dtype=initial_Kp.dtype, size=order+1,
-                                           tensor_array_name="ret_Kp")
+            # Auxiliary Kp for using in While.
+            acc_Kp = taops.TensorArray(dtype=initial_Kp.dtype, size=order+1,
+                                       tensor_array_name="ret_Kp")
 
-                # Main loop, where Kp values are calculated.
-                i = tf.constant(0)
-                a = Kp.read(0)
-                acc_Kp = acc_Kp.write(0, a)
-                def _update_Kp(acc_Kp, a, S, i):
-                    aux1 = tf.mul(S, a)
-                    aux2 = tf.transpose(tf.matmul(aux1, D) * match_sq)
-                    a = tf.transpose(tf.matmul(aux2, D))
-                    i += 1
-                    acc_Kp = acc_Kp.write(i, a)
-                    return [acc_Kp, a, S, i]
-                cond = lambda _1, _2, _3, i: i < order
-                loop_vars = [acc_Kp, a, S, i]
-                final_Kp, _, _, _ = cfops.While(cond=cond, body=_update_Kp, 
-                                                loop_vars=loop_vars)
-                final_Kp = final_Kp.pack()
+            # Main loop, where Kp values are calculated.
+            i = tf.constant(0)
+            a = Kp.read(0)
+            acc_Kp = acc_Kp.write(0, a)
+            def _update_Kp(acc_Kp, a, S, i):
+                a = tf.Print(a, [a, S], message='inside while', summarize=200)
+                aux1 = tf.mul(S, a)
+                aux2 = tf.transpose(tf.matmul(aux1, D) * match_sq)
+                a = tf.transpose(tf.matmul(aux2, D))
+                i += 1
+                acc_Kp = acc_Kp.write(i, a)
+                return [acc_Kp, a, S, i]
+            cond = lambda _1, _2, _3, i: i < order
+            loop_vars = [acc_Kp, a, S, i]
+            final_Kp, _, _, _ = cfops.While(cond=cond, body=_update_Kp, 
+                                            loop_vars=loop_vars)
+            final_Kp = final_Kp.pack()
 
-                # Final calculation. We gather all Kps and
-                # multiply then by their coeficients.
-                mul1 = S * final_Kp[:order, :, :]
-                sum1 = tf.reduce_sum(mul1, 1)
-                Ki = tf.reduce_sum(sum1, 1, keep_dims=True) * match_sq
-                k_result = tf.matmul(self._coefs, Ki)
-                return k_result
-            
-            gram_vector = fops.map_fn(_calc_k, tf_indices)
-            gap_grads = tf.gradients(gram_vector, self._gap)
-            match_grads = tf.gradients(gram_vector, self._match)
-            coef_grads = tf.gradients(gram_vector, self._coefs)
-            #all_stuff = [result] + gap_grads + match_grads + coef_grads
-            all_stuff = (gram_vector, gap_grads, match_grads, coef_grads)
-            self.result = all_stuff
+            # Final calculation. We gather all Kps and
+            # multiply then by their coeficients.
+            mul1 = S * final_Kp[:order, :, :]
+            sum1 = tf.reduce_sum(mul1, 1)
+            Ki = tf.reduce_sum(sum1, 1, keep_dims=True) * match_sq
+            k_result = tf.matmul(self._coefs, Ki)
+            gap_grad = tf.gradients(k_result, self._gap)
+            match_grad = tf.gradients(k_result, self._match)
+            coefs_grad = tf.gradients(k_result, self._coefs)
+            #all_stuff = [k_result, gap_grad, match_grad, coefs_grad]
+            self.result = [k_result, k_result, k_result, k_result]
 
     def K(self, X, X2, gram, params):
         """
@@ -137,46 +127,65 @@ class TFGramStringKernel(object):
         # enter gram mode. In gram mode we skip
         # graph rebuilding.
         if gram:
-            if not gram_mode:
+            if not self.gram_mode:
                 maxlen = max([len(x[0]) for x in X])
                 X = self._code_and_pad(X, maxlen)
-                #self.maxlen = maxlen
+                self.maxlen = maxlen
                 self.gram_mode = True
-                indices = np.array([[i, j] for i in range(len(X)) 
-                                    for j in range(len(X)) if i <= j])
-                self._build_graph(maxlen, order, indices, X)
+                #self.indices = np.array([[i, j] for i in range(len(X)) 
+                #                    for j in range(len(X)) if i <= j])
+                self._build_graph(maxlen, order, X)
         else: # We rebuild the graph, usually for predictions
             self.gram_mode = False
             maxlen = max([len(x[0]) for x in np.concatenate((X, X2))])
             X = self._code_and_pad(X, maxlen)
             X2 = self._code_and_pad(X2, maxlen)
-            #self.maxlen = maxlen
-            indices = np.array([[i, j] for i in range(len(X)) 
-                                for j in range(len(X2))])
-            self._build_graph(maxlen, order, indices, X, X2)
+            self.maxlen = maxlen
+            #self.indices = np.array([[i, j] for i in range(len(X)) 
+            #                    for j in range(len(X2))])
+            self._build_graph(maxlen, order, X, X2)
+
+        # Initialize return values
+        k_results = np.zeros(shape=(len(X), len(X2)))
+        gap_grads = np.zeros(shape=(len(X), len(X2)))
+        match_grads = np.zeros(shape=(len(X), len(X2)))
+        coef_grads = np.zeros(shape=(len(X), len(X2), order))
 
         # We start a TF session and run it
         sess = tf.Session(graph=self.graph, config=self.tf_config)
-        feed_dict = {self._gap: params[0], 
-                     self._match: params[1],
-                     self._coefs: np.array(params[2])[None, :]
-                     self._indices: self.indices}
-        output = sess.run(self.result, feed_dict=feed_dict)
-        k_result, gap_grads, match_grads, coef_grads = sess.run(self.result,
-                                                                feed_dict=feed_dict)
+        for i in xrange(len(X)):
+            for j in xrange(len(X2)):
+                if gram and (j < i):
+                    k_results[i, j] = k_results[j, i]
+                    gap_grads[i, j] = gap_grads[j, i]
+                    match_grads[i, j] = match_grads[j, i]
+                    coef_grads[i, j] = coef_grads[j, i]
+                else:
+                    feed_dict = {self._gap: params[0], 
+                                 self._match: params[1],
+                                 self._coefs: np.array(params[2])[None, :],
+                                 self._index1: i,
+                                 self._index2: i}
+                    k_result, gap_grad, match_grad, coef_grad = sess.run(self.result,
+                                                                         feed_dict=feed_dict)
+                    k_results[i, j] = k_result
+                    gap_grads[i, j] = gap_grad
+                    match_grads[i, j] = match_grad
+                    coef_grads[i, j] = coef_grad
+            
         sess.close()
         
         # Reshape the return values since they are vectors:
-        if gram:
-            lenX2 = None
-        else:
-            lenX2 = len(X2)
-        k_result = self._triangulate(k_result, self.indices, len(X), lenX2)
-        gap_grads = self._triangulate(gap_grads, self.indices, len(X), lenX2)
-        match_grads = self._triangulate(match_grads, self.indices, len(X), lenX2)
-        coef_grads = self._triangulate(coef_grads, self.indices, len(X), lenX2)
+        #if gram:
+        #    lenX2 = None
+        #else:
+        #    lenX2 = len(X2)
+        #k_result = self._triangulate(k_result, self.indices, len(X), lenX2)
+        #gap_grads = self._triangulate(gap_grads, self.indices, len(X), lenX2)
+        #match_grads = self._triangulate(match_grads, self.indices, len(X), lenX2)
+        #coef_grads = self._triangulate(coef_grads, self.indices, len(X), lenX2)
     
-        return k_result, gap_grads, match_grads, coef_grads
+        return k_results, gap_grads, match_grads, coef_grads
 
     def _code_and_pad(self, X, maxlen):
         """
