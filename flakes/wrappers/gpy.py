@@ -38,7 +38,7 @@ class GPyStringKernel(StringKernel, Kern):
     def Kdiag(self, X):
         result = np.zeros(shape=(len(X),))
         for i, x1 in enumerate(X):
-            result[i] = self.K(x1[0], x1[0])
+            result[i] = self.K(x1[0], x1[0])[0][0]
         return result
 
     def _get_params(self):

@@ -7,6 +7,7 @@ from sk_tf_batch import TFBatchStringKernel
 from sk_numpy import NumpyStringKernel
 from sk_naive import NaiveStringKernel
 from sk_util import build_one_hot
+import line_profiler
 
 
 class StringKernel(object):
