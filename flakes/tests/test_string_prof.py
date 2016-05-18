@@ -10,7 +10,6 @@ import sys
 class StringKernelProfiling(unittest.TestCase):
     DEVICE = '/cpu:0'
 
-
     def setUp(self):
         self.s1 = "Scientists throughout the world and all the friends of the late Baron Sir Ferdinand von Mueller, who was Government Botanist of Victoria, will be pleased to learn that his executors, the Rev. W. Potter, F.R.G.S., Alexander Buttner, and Hermann Buttner, are now making an effort to erect over the grave a monument worthy of the deceased savant's fame. The monument will be of grey granite, 23 feet in height."
         self.s2 = "To say he shall leave a wall of strong Towns behind him is to say nothing at all in this case, while there is an Army of 60000 Men in the field there; to say he shall want Provisions or any Assistance whatever is to say nothing while we are Masters of the Seas and can in four Hours come from Dover to Bologn, with Supplies of all Sorts, a passage so easie that you might bake his very Bread for him in Kent if you pleas'd."
@@ -20,7 +19,7 @@ class StringKernelProfiling(unittest.TestCase):
         self.k_slow = flakes.string.StringKernel(mode='slow', alphabet=alphabet)
         self.k_np = flakes.string.StringKernel(mode='numpy', alphabet=alphabet)
         self.k_tf = flakes.string.StringKernel(alphabet=alphabet, device=self.DEVICE)
-        self.k_tf_gram = flakes.string.StringKernel(mode='tf-gram', alphabet=alphabet, device=self.DEVICE))
+        self.k_tf_gram = flakes.string.StringKernel(mode='tf-gram', alphabet=alphabet, device=self.DEVICE)
 
     @unittest.skip('profiling')
     def test_prof_1(self):
@@ -127,7 +126,6 @@ class StringKernelProfiling(unittest.TestCase):
 
 if __name__ == "__main__":
     if len(sys.argv) > 0:
-        if 'gpu' in sys.argv[0]:
-            StringKernelProfiling.DEVICE = sys.argv[0]
+        StringKernelProfiling.DEVICE = sys.argv.pop()
     unittest.main()
     

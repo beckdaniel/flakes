@@ -20,7 +20,7 @@ class TFGramStringKernel(object):
         self.gram_mode = False
         if 'gpu' in device:
             self.tf_config = tf.ConfigProto(
-                gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=1.0),
+                gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.9),
                 device_count = {'gpu': 1}
             )
         elif 'cpu' in device:
@@ -189,7 +189,10 @@ class TFGramStringKernel(object):
         for x in X:
             new_x = np.zeros((maxlen, self.embs_dim))
             for i, word in enumerate(x[0]):
-                new_x[i] = self.embs[word]
+                try:
+                    new_x[i] = self.embs[word]
+                except KeyError:
+                    pass # OOV, stick with zeros
             new_X.append(new_x)
         return np.array(new_X)
 
