@@ -174,10 +174,15 @@ class TFGramStringKernel(object):
                                  self._coefs: np.array(params[2])[None, :],
                                  self._index1: i,
                                  self._index2: j}
+                    import datetime
+                    before = datetime.datetime.now()
                     k_result, gap_grad, match_grad, coef_grad = sess.run(self.result,
                                                                          feed_dict=feed_dict,
                                                                          options=run_options, 
                                                                          run_metadata=run_metadata)
+                    after = datetime.datetime.now()
+                    print 'SESSION RUN: ',
+                    print after - before
                     if self.trace is not None:
                         tl = timeline.Timeline(run_metadata.step_stats)
                         trace = tl.generate_chrome_trace_format()
