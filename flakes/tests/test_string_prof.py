@@ -128,7 +128,9 @@ class StringKernelProfiling(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    if len(sys.argv) > 2:
+    if len(sys.argv) == 2:
+        StringKernelProfiling.DEVICE = sys.argv.pop()
+    elif len(sys.argv) > 2:
         StringKernelProfiling.TRACE_FILE = sys.argv.pop()
         StringKernelProfiling.DEVICE = sys.argv.pop()
     unittest.main()
