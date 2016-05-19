@@ -184,7 +184,7 @@ class TFGramStringKernel(object):
                     print 'SESSION RUN: ',
                     print after - before
                     if self.trace is not None:
-                        tl = timeline.Timeline(run_metadata.step_stats)
+                        tl = timeline.Timeline(run_metadata.step_stats, graph=self.graph)
                         trace = tl.generate_chrome_trace_format()
                         with open(self.trace, 'w') as f:
                             f.write(trace)
