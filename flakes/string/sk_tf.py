@@ -168,5 +168,6 @@ class TFStringKernel(object):
                     gap_grads[i, j] = result[1]
                     match_grads[i, j] = result[2]
                     coef_grads[i, j] = np.array(result[3:])
+            print i
         sess.close()
         return k_result, gap_grads, match_grads, coef_grads
