@@ -118,8 +118,8 @@ class StringKernelProfiling(unittest.TestCase):
         #self.k_np.order_coefs = [0.1, 0.2, 0.4, 0.5, 0.7, 1, 1, 1]
         #self.k_np.decay = 0.8
         print "START PROF GRAM"
-        X = [[self.s1]] * 1
-        X2 = [[self.s2]] * 1
+        X = [[self.s1]] * 3
+        X2 = [[self.s2]] * 3
         before = datetime.datetime.now()
         result2 = self.k_tf_gram.K(X, X2)
         after = datetime.datetime.now()
