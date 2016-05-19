@@ -41,7 +41,8 @@ class StringKernel(object):
 
     def __init__(self, gap_decay=1.0, match_decay=1.0,
                  order_coefs=[1.0], mode='tf', 
-                 embs=None, alphabet=None, device='/cpu:0'):
+                 embs=None, alphabet=None, device='/cpu:0',
+                 trace=None):
         if (embs is None) and (alphabet is None):
             raise ValueError("You need to provide either an embedding" + 
                              " dictionary through \"embs\" or a list" +
@@ -57,7 +58,7 @@ class StringKernel(object):
         if mode == 'tf':
             self._implementation = TFStringKernel(embs, device)
         elif mode == 'tf-gram':
-            self._implementation = TFGramStringKernel(embs, device)
+            self._implementation = TFGramStringKernel(embs, device=device, trace=trace)
         elif mode == 'tf-batch':
             self._implementation = TFBatchStringKernel(embs, device)
         elif mode == 'numpy':

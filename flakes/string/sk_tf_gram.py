@@ -5,19 +5,22 @@ from tensorflow.python.ops import tensor_array_ops as taops
 from tensorflow.python.ops import functional_ops as fops
 from sk_util import build_input_matrix
 import sys
-
+from tensorflow.core.protobuf import config_pb2
+from tensorflow.python.client import timeline
+import json
 
 class TFGramStringKernel(object):
     """
     A TensorFlow string kernel implementation.
     """
-    def __init__(self, embs, device='/cpu:0'):    
+    def __init__(self, embs, device='/cpu:0', trace=None):    
         self.embs = embs
         self.embs_dim = embs[embs.keys()[0]].shape[0]
         self.graph = None
         self.maxlen = 0
         self.device = device
         self.gram_mode = False
+        self.trace = trace
         if 'gpu' in device:
             self.tf_config = tf.ConfigProto(
                 gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.9),
@@ -43,25 +46,25 @@ class TFGramStringKernel(object):
         with self.graph.as_default(), tf.device(self.device):
             # Datasets are loaded as constants. Useful for GPUs.
             # Only feasible for small datasets though.
-            tf_X = tf.constant(X, dtype=tf.float32)
-            tf_X2 = tf.constant(X2, dtype=tf.float32)
+            tf_X = tf.constant(X, dtype=tf.float32, name='X')
+            tf_X2 = tf.constant(X2, dtype=tf.float32, name='X2')
 
             # Kernel hyperparameters are also placeholders.
             # The K function is responsible for tying the
             # hyper values from class to this calculation
             # and to update the hyper gradients.
-            self._gap = tf.placeholder("float", [])
-            self._match = tf.placeholder("float", [])
-            self._coefs = tf.placeholder("float", [1, order])
-            self._index1 = tf.placeholder("int32", [])
-            self._index2 = tf.placeholder("int32", [])
-            match_sq = self._match ** 2
+            self._gap = tf.placeholder("float", [], name='gap_decay')
+            self._match = tf.placeholder("float", [], name='match_decay')
+            self._coefs = tf.placeholder("float", [1, order], name='coefs')
+            self._index1 = tf.placeholder("int32", [], name='index1')
+            self._index2 = tf.placeholder("int32", [], name='index2')
+            match_sq = tf.pow(self._match, 2, name='match_sq')
 
             # Select the inputs from the pre-loaded
             # dataset
-            mat1 = tf.gather(tf_X, self._index1)
-            mat2 = tf.gather(tf_X2, self._index2)
-            S = tf.matmul(mat1, tf.transpose(mat2))
+            mat1 = tf.gather(tf_X, self._index1, name='mat1')
+            mat2 = tf.gather(tf_X2, self._index2, name='mat2')
+            S = tf.matmul(mat1, tf.transpose(mat2), name='S_matrix')
 
             # Triangular matrices over decay powers.
             power = np.ones((n, n))
@@ -70,10 +73,10 @@ class TFGramStringKernel(object):
             for k in xrange(n-1):
                 power[i2-k-1 == i1] = k
                 tril[i2-k-1 == i1] = 1.0
-            tf_tril = tf.constant(tril, dtype=tf.float32)
-            tf_power = tf.constant(power, dtype=tf.float32)
-            gaps = tf.fill([n, n], self._gap)
-            D = tf.pow(tf.mul(gaps, tril), power)
+            tf_tril = tf.constant(tril, dtype=tf.float32, name='tril')
+            tf_power = tf.constant(power, dtype=tf.float32, name='power')
+            gaps = tf.fill([n, n], self._gap, name='gaps')
+            D = tf.pow(tf.mul(gaps, tril), power, name='D_matrix')
 
             # Initialize Kp, one for each n-gram order (including 0)
             initial_Kp = tf.ones(shape=(order+1, n, n))
@@ -86,13 +89,13 @@ class TFGramStringKernel(object):
                                        tensor_array_name="ret_Kp")
 
             # Main loop, where Kp values are calculated.
-            i = tf.constant(0)
+            i = tf.constant(0, name='i')
             a = Kp.read(0)
             acc_Kp = acc_Kp.write(0, a)
             def _update_Kp(acc_Kp, a, S, i):
-                aux1 = tf.mul(S, a)
-                aux2 = tf.transpose(tf.matmul(aux1, D) * match_sq)
-                a = tf.transpose(tf.matmul(aux2, D))
+                aux1 = tf.mul(S, a, name='aux1')
+                aux2 = tf.transpose(tf.matmul(aux1, D) * match_sq, name='aux2')
+                a = tf.transpose(tf.matmul(aux2, D), name='a')
                 i += 1
                 acc_Kp = acc_Kp.write(i, a)
                 return [acc_Kp, a, S, i]
@@ -104,14 +107,16 @@ class TFGramStringKernel(object):
 
             # Final calculation. We gather all Kps and
             # multiply then by their coeficients.
-            mul1 = S * final_Kp[:order, :, :]
-            sum1 = tf.reduce_sum(mul1, 1)
-            Ki = tf.reduce_sum(sum1, 1, keep_dims=True) * match_sq
-            k_result = tf.matmul(self._coefs, Ki)
-            gap_grad = tf.gradients(k_result, self._gap)
-            match_grad = tf.gradients(k_result, self._match)
-            coefs_grad = tf.gradients(k_result, self._coefs)
+            mul1 = tf.mul(S, final_Kp[:order, :, :], name='mul1')
+            sum1 = tf.reduce_sum(mul1, 1, name='sum1')
+            Ki = tf.mul(tf.reduce_sum(sum1, 1, keep_dims=True, name='pre_Ki'), match_sq, name='Ki')
+            k_result = tf.matmul(self._coefs, Ki, name='k_result')
+            gap_grad = tf.gradients(k_result, self._gap, name='gradients_gap_grad')
+            match_grad = tf.gradients(k_result, self._match, name='gradients_match_grad')
+            coefs_grad = tf.gradients(k_result, self._coefs, name='gradients_coefs_grad')
             all_stuff = [k_result] + gap_grad + match_grad + coefs_grad
+            #all_stuff = [k_result] + k_result + k_result + k_result
+            #all_stuff = [k_result, k_result, k_result, k_result]
             self.result = all_stuff
 
     def K(self, X, X2, gram, params):
@@ -145,6 +150,15 @@ class TFGramStringKernel(object):
         match_grads = np.zeros(shape=(len(X), len(X2)))
         coef_grads = np.zeros(shape=(len(X), len(X2), order))
 
+        # Add optional tracing for profiling
+        if self.trace is not None:
+            run_options = config_pb2.RunOptions(
+                trace_level=config_pb2.RunOptions.FULL_TRACE)
+            run_metadata = config_pb2.RunMetadata()
+        else:
+            run_options=None
+            run_metadata=None
+
         # We start a TF session and run it
         sess = tf.Session(graph=self.graph, config=self.tf_config)
         for i in xrange(len(X)):
@@ -161,7 +175,14 @@ class TFGramStringKernel(object):
                                  self._index1: i,
                                  self._index2: j}
                     k_result, gap_grad, match_grad, coef_grad = sess.run(self.result,
-                                                                         feed_dict=feed_dict)
+                                                                         feed_dict=feed_dict,
+                                                                         options=run_options, 
+                                                                         run_metadata=run_metadata)
+                    if self.trace is not None:
+                        tl = timeline.Timeline(run_metadata.step_stats)
+                        trace = tl.generate_chrome_trace_format()
+                        with open(self.trace, 'w') as f:
+                            f.write(trace)
                     k_results[i, j] = k_result
                     gap_grads[i, j] = gap_grad
                     match_grads[i, j] = match_grad
