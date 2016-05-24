@@ -34,7 +34,7 @@ class TFGramStringKernel(object):
                 intra_op_parallelism_threads = 4,
                 inter_op_parallelism_threads = 4,
             )
-        self.BATCH_SIZE = 100
+        self.BATCH_SIZE = 20
 
     def _build_graph(self, n, order, X, X2=None):
         """
@@ -62,7 +62,7 @@ class TFGramStringKernel(object):
             #self._index1 = tf.placeholder("int32", [], name='index1')
             #self._index2 = tf.placeholder("int32", [], name='index2')
             self._indices = tf.placeholder("float32", [self.BATCH_SIZE, 2], name='indices')
-            match_sq = tf.pow(self._match, 2, name='match_sq')
+            #match_sq = tf.pow(self._match, 2, name='match_sq')
 
             # Triangular matrices over decay powers.
             power = np.ones((n, n))
@@ -71,10 +71,10 @@ class TFGramStringKernel(object):
             for k in xrange(n-1):
                 power[i2-k-1 == i1] = k
                 tril[i2-k-1 == i1] = 1.0
-            tf_tril = tf.constant(tril, dtype=tf.float32, name='tril')
-            tf_power = tf.constant(power, dtype=tf.float32, name='power')
-            gaps = tf.fill([n, n], self._gap, name='gaps')
-            D = tf.pow(tf.mul(gaps, tril), power, name='D_matrix')
+            #tf_tril = tf.constant(tril, dtype=tf.float32, name='tril')
+            #tf_power = tf.constant(power, dtype=tf.float32, name='power')
+            #gaps = tf.fill([n, n], self._gap, name='gaps')
+            #D = tf.pow(tf.mul(gaps, tril), power, name='D_matrix')
 
             ks = [] 
             gapgs = []
@@ -83,6 +83,13 @@ class TFGramStringKernel(object):
 
             # Kernel calculation + gradients
             for i in xrange(self.BATCH_SIZE):
+
+                tf_tril = tf.constant(tril, dtype=tf.float32, name='tril')
+                tf_power = tf.constant(power, dtype=tf.float32, name='power')
+                gaps = tf.fill([n, n], self._gap, name='gaps')
+                D = tf.pow(tf.mul(gaps, tril), power, name='D_matrix')
+                match_sq = tf.pow(self._match, 2, name='match_sq')
+
                 _index = tf.gather(self._indices, i, name='index_%d' % i)
                 _index1 = tf.to_int32(tf.gather(_index, 0, name='index1_%d' % i))
                 _index2 = tf.to_int32(tf.gather(_index, 1, name='index2_%d' % i))
@@ -110,6 +117,7 @@ class TFGramStringKernel(object):
             #all_stuff = [k_result] + gap_result + match_result + coefs_result
             #all_stuff = [k] + gapg + matchg + coefsg
             all_stuff = (k_result, gap_result, match_result, coefs_result)
+            #all_stuff = ks + gapgs + matchgs + coefsgs
             self.result = all_stuff
 
     def _build_k(self, index1, index2, tf_X, tf_X2, D, match_sq,
@@ -242,6 +250,13 @@ class TFGramStringKernel(object):
             k, gapg, matchg, coefsg = sess.run(self.result, feed_dict=feed_dict,
                                                options=run_options, 
                                                run_metadata=run_metadata)
+            #result = sess.run(self.result, feed_dict=feed_dict,
+            #                  options=run_options, 
+            #                  run_metadata=run_metadata)
+            #k = result[:self.BATCH_SIZE]
+            #gapg = result[self.BATCH_SIZE:(self.BATCH_SIZE * 2)]
+            #matchg = result[(self.BATCH_SIZE * 2):(self.BATCH_SIZE * 3)]
+            #coefsg = result[(self.BATCH_SIZE * 3):]
             after = datetime.datetime.now()
             print 'SESSION RUN: ',
             print after - before
