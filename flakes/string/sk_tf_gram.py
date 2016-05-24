@@ -34,7 +34,7 @@ class TFGramStringKernel(object):
                 intra_op_parallelism_threads = 4,
                 inter_op_parallelism_threads = 4,
             )
-        self.BATCH_SIZE = 10
+        self.BATCH_SIZE = 20
 
     def _build_graph(self, n, order, X, X2=None):
         """
