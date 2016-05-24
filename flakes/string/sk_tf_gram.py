@@ -144,9 +144,9 @@ class TFGramStringKernel(object):
         sum1 = tf.reduce_sum(mul1, 1)#, name='sum1')
         Ki = tf.mul(tf.reduce_sum(sum1, 1, keep_dims=True), match_sq)#, name='Ki')
         k_result = tf.matmul(coefs, Ki)#, name='k_result')
-        gap_grad = tf.gradients(k_result, gap)[0]#, name='gradients_gap_grad')[0]
-        match_grad = tf.gradients(k_result, match)[0]#, name='gradients_match_grad')[0]
-        coefs_grad = tf.gradients(k_result, coefs)[0]#, name='gradients_coefs_grad')[0]
+        gap_grad = tf.gradients(k_result, gap, colocate_gradients_with_ops=True)[0]#, name='gradients_gap_grad')[0]
+        match_grad = tf.gradients(k_result, match, colocate_gradients_with_ops=True)[0]#, name='gradients_match_grad')[0]
+        coefs_grad = tf.gradients(k_result, coefs, colocate_gradients_with_ops=True)[0]#, name='gradients_coefs_grad')[0]
         return k_result, gap_grad, match_grad, coefs_grad
 
     def K(self, X, X2, gram, params):
