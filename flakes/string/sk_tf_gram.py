@@ -83,9 +83,9 @@ class TFGramStringKernel(object):
 
             # Kernel calculation + gradients
             for i in xrange(self.BATCH_SIZE):
-                _index = tf.gather(self._indices, i, name='index')
-                _index1 = tf.gather(_index, 0, name='index1')
-                _index2 = tf.gather(_index, 1, name='index2')
+                _index = tf.gather(self._indices, i, name='index_%d' % i)
+                _index1 = tf.gather(_index, 0, name='index1_%d' % i)
+                _index2 = tf.gather(_index, 1, name='index2_%d' % i)
                 k, gapg, matchg, coefsg = self._build_k(_index1, _index2,
                                                         tf_X, tf_X2, D, match_sq,
                                                         self._gap, self._match,
@@ -116,29 +116,29 @@ class TFGramStringKernel(object):
                  gap, match, coefs, n, order):
         # Select the inputs from the pre-loaded
         # dataset
-        mat1 = tf.gather(tf_X, index1, name='mat1')
-        mat2 = tf.gather(tf_X2, index2, name='mat2')
-        S = tf.matmul(mat1, tf.transpose(mat2), name='S_matrix')
+        mat1 = tf.gather(tf_X, index1)#, name='mat1')
+        mat2 = tf.gather(tf_X2, index2)#, name='mat2')
+        S = tf.matmul(mat1, tf.transpose(mat2))#, name='S_matrix')
 
         # Kp calculation
         Kp = []
         Kp.append(tf.ones(shape=(n, n)))
         for i in xrange(order):
-            aux1 = tf.mul(S, Kp[i], name="aux1_%d" % i)
-            aux2 = tf.transpose(tf.matmul(aux1, D) * match_sq, name="aux2_%d" % i)
-            aux3 = tf.transpose(tf.matmul(aux2, D), name="aux3_%d" % i)
+            aux1 = tf.mul(S, Kp[i])#, name="aux1_%d" % i)
+            aux2 = tf.transpose(tf.matmul(aux1, D) * match_sq)#, name="aux2_%d" % i)
+            aux3 = tf.transpose(tf.matmul(aux2, D))#, name="aux3_%d" % i)
             Kp.append(aux3)
         final_Kp = tf.pack(Kp)
 
         # Final calculation. We gather all Kps and
         # multiply then by their coeficients.
-        mul1 = tf.mul(S, final_Kp[:order, :, :], name='mul1')
-        sum1 = tf.reduce_sum(mul1, 1, name='sum1')
-        Ki = tf.mul(tf.reduce_sum(sum1, 1, keep_dims=True, name='pre_Ki'), match_sq, name='Ki')
-        k_result = tf.matmul(coefs, Ki, name='k_result')
-        gap_grad = tf.gradients(k_result, gap, name='gradients_gap_grad')[0]
-        match_grad = tf.gradients(k_result, match, name='gradients_match_grad')[0]
-        coefs_grad = tf.gradients(k_result, coefs, name='gradients_coefs_grad')[0]
+        mul1 = tf.mul(S, final_Kp[:order, :, :])#, name='mul1')
+        sum1 = tf.reduce_sum(mul1, 1)#, name='sum1')
+        Ki = tf.mul(tf.reduce_sum(sum1, 1, keep_dims=True), match_sq)#, name='Ki')
+        k_result = tf.matmul(coefs, Ki)#, name='k_result')
+        gap_grad = tf.gradients(k_result, gap)[0]#, name='gradients_gap_grad')[0]
+        match_grad = tf.gradients(k_result, match)[0]#, name='gradients_match_grad')[0]
+        coefs_grad = tf.gradients(k_result, coefs)[0]#, name='gradients_coefs_grad')[0]
         return k_result, gap_grad, match_grad, coefs_grad
 
     def K(self, X, X2, gram, params):
