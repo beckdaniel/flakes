@@ -89,8 +89,6 @@ class TFGramStringKernel(object):
                 aux2 = tf.transpose(tf.matmul(aux1, D) * match_sq, name="aux2_%d" % i)
                 aux3 = tf.transpose(tf.matmul(aux2, D), name="aux3_%d" % i)
                 Kp.append(aux3)
-
-            print Kp
             final_Kp = tf.pack(Kp)
             ################################################
             
