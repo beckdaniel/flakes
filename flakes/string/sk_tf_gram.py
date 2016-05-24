@@ -232,9 +232,8 @@ class TFGramStringKernel(object):
         while indices != []:
             items = indices[:self.BATCH_SIZE]
             if len(items) < self.BATCH_SIZE:
+                # padding
                 items += [[0, 0]] * (self.BATCH_SIZE - len(items))
-                print items
-
             feed_dict = {self._gap: params[0], 
                          self._match: params[1],
                          self._coefs: np.array(params[2])[None, :],
@@ -295,8 +294,6 @@ class TFGramStringKernel(object):
         original matrix form.
         """
         vector = np.squeeze(np.array(vector))
-        print vector
-        print indices
         if lenX2 == None:
             lenX2 = lenX
             gram = True
@@ -310,5 +307,4 @@ class TFGramStringKernel(object):
             result[elem[0], elem[1]] = vector[i]
             if elem[0] != elem[1] and gram:
                 result[elem[1], elem[0]] = vector[i]
-        print result
         return result
