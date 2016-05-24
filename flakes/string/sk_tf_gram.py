@@ -79,59 +79,24 @@ class TFGramStringKernel(object):
             D = tf.pow(tf.mul(gaps, tril), power, name='D_matrix')
 
             ################################################
-            # ORIGINAL WHILE-BASED
-
-            # Initialize Kp, one for each n-gram order (including 0)
-            #initial_Kp = tf.ones(shape=(order+1, n, n))
-            #Kp = taops.TensorArray(dtype=initial_Kp.dtype, size=order+1,
-            #                       tensor_array_name="Kp")
-            #Kp = Kp.unpack(initial_Kp)
-                
-            # Auxiliary Kp for using in While.
-            #acc_Kp = taops.TensorArray(dtype=initial_Kp.dtype, size=order+1,
-            #                           tensor_array_name="ret_Kp")
-
-            # Main loop, where Kp values are calculated.
-            #i = tf.constant(0, name='i')
-            #a = Kp.read(0)
-            #acc_Kp = acc_Kp.write(0, a)
-            #def _update_Kp(acc_Kp, a, S, i):
-            #    aux1 = tf.mul(S, a, name='aux1')
-            #    aux2 = tf.transpose(tf.matmul(aux1, D) * match_sq, name='aux2')
-            #    a = tf.transpose(tf.matmul(aux2, D), name='a')
-            #    i += 1
-            #    acc_Kp = acc_Kp.write(i, a)
-            #    return [acc_Kp, a, S, i]
-            #cond = lambda _1, _2, _3, i: i < order
-            #loop_vars = [acc_Kp, a, S, i]
-            #final_Kp, _, _, _ = cfops.While(cond=cond, body=_update_Kp, 
-            #                                loop_vars=loop_vars)
-            #final_Kp = final_Kp.pack()
-
-            ################################################
             # ALTERNATIVE: STATIC EXPLICIT LOOP UNROLLING
             # Possible because we know the n-gram order at
             # graph-building time.
-            #Kp = tf.Variable(tf.ones(shape=(order+1, n, n)))
             Kp = []
             Kp.append(tf.ones(shape=(n, n)))
             for i in xrange(order):
-                #Kp_i = tf.gather(Kp, i, name="Kp_%d" % i)
-                #aux1 = tf.mul(S, Kp_i, name="aux1_%d" % i)
                 aux1 = tf.mul(S, Kp[i], name="aux1_%d" % i)
                 aux2 = tf.transpose(tf.matmul(aux1, D) * match_sq, name="aux2_%d" % i)
                 aux3 = tf.transpose(tf.matmul(aux2, D), name="aux3_%d" % i)
                 Kp.append(aux3)
 
             print Kp
-            #final_Kp = tf.convert_to_tensor(Kp)#, dtype=tf.float32)
             final_Kp = tf.pack(Kp)
             ################################################
             
             # Final calculation. We gather all Kps and
             # multiply then by their coeficients.
             mul1 = tf.mul(S, final_Kp[:order, :, :], name='mul1')
-            #mul1 = tf.mul(S, Kp[:order, :, :], name='mul1')
             sum1 = tf.reduce_sum(mul1, 1, name='sum1')
             Ki = tf.mul(tf.reduce_sum(sum1, 1, keep_dims=True, name='pre_Ki'), match_sq, name='Ki')
             k_result = tf.matmul(self._coefs, Ki, name='k_result')
