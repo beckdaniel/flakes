@@ -61,7 +61,7 @@ class TFGramStringKernel(object):
             self._coefs = tf.placeholder("float", [1, order], name='coefs')
             #self._index1 = tf.placeholder("int32", [], name='index1')
             #self._index2 = tf.placeholder("int32", [], name='index2')
-            self._indices = tf.placeholder("int32", [self.BATCH_SIZE, 2], name='indices')
+            self._indices = tf.placeholder("float32", [self.BATCH_SIZE, 2], name='indices')
             match_sq = tf.pow(self._match, 2, name='match_sq')
 
             # Triangular matrices over decay powers.
@@ -84,8 +84,8 @@ class TFGramStringKernel(object):
             # Kernel calculation + gradients
             for i in xrange(self.BATCH_SIZE):
                 _index = tf.gather(self._indices, i, name='index_%d' % i)
-                _index1 = tf.gather(_index, 0, name='index1_%d' % i)
-                _index2 = tf.gather(_index, 1, name='index2_%d' % i)
+                _index1 = tf.to_int32(tf.gather(_index, 0, name='index1_%d' % i))
+                _index2 = tf.to_int32(tf.gather(_index, 1, name='index2_%d' % i))
                 k, gapg, matchg, coefsg = self._build_k(_index1, _index2,
                                                         tf_X, tf_X2, D, match_sq,
                                                         self._gap, self._match,
