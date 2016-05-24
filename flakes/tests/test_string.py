@@ -209,7 +209,8 @@ class StringKernelTests(unittest.TestCase):
         self.assertAlmostEqual(np.sum(true_grads)/100, np.sum(g_result)/100, places=2)
 
     def test_compare_gram_based(self):
-        X = [[self.s1], [self.s2], [self.s3], [self.s4]]
+        #X = [[self.s1], [self.s2], [self.s3], [self.s4]]
+        X = [[self.s1], [self.s2], [self.s3]]
         self.k_tf.order_coefs = [0.1, 0.2, 0.4, 0.5, 0.7]
         self.k_tf.decay = 0.8
         result1 = self.k_tf.K(X)

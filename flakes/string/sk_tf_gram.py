@@ -8,6 +8,8 @@ import sys
 from tensorflow.core.protobuf import config_pb2
 from tensorflow.python.client import timeline
 import json
+import datetime
+import copy
 
 class TFGramStringKernel(object):
     """
@@ -32,6 +34,7 @@ class TFGramStringKernel(object):
                 intra_op_parallelism_threads = 4,
                 inter_op_parallelism_threads = 4,
             )
+        self.BATCH_SIZE = 10
 
     def _build_graph(self, n, order, X, X2=None):
         """
@@ -56,8 +59,9 @@ class TFGramStringKernel(object):
             self._gap = tf.placeholder("float", [], name='gap_decay')
             self._match = tf.placeholder("float", [], name='match_decay')
             self._coefs = tf.placeholder("float", [1, order], name='coefs')
-            self._index1 = tf.placeholder("int32", [], name='index1')
-            self._index2 = tf.placeholder("int32", [], name='index2')
+            #self._index1 = tf.placeholder("int32", [], name='index1')
+            #self._index2 = tf.placeholder("int32", [], name='index2')
+            self._indices = tf.placeholder("int32", [self.BATCH_SIZE, 2], name='indices')
             match_sq = tf.pow(self._match, 2, name='match_sq')
 
             # Triangular matrices over decay powers.
@@ -72,13 +76,40 @@ class TFGramStringKernel(object):
             gaps = tf.fill([n, n], self._gap, name='gaps')
             D = tf.pow(tf.mul(gaps, tril), power, name='D_matrix')
 
-            # Kernel calculation + gradients
-            k, gapg, matchg, coefsg = self._build_k(self._index1, self._index2,
-                                                    tf_X, tf_X2, D, match_sq,
-                                                    self._gap, self._match,
-                                                    self._coefs, n, order)
+            ks = [] 
+            gapgs = []
+            matchgs = []
+            coefsgs = []
 
-            all_stuff = [k] + gapg + matchg + coefsg
+            # Kernel calculation + gradients
+            for i in xrange(self.BATCH_SIZE):
+                _index = tf.gather(self._indices, i, name='index')
+                _index1 = tf.gather(_index, 0, name='index1')
+                _index2 = tf.gather(_index, 1, name='index2')
+                k, gapg, matchg, coefsg = self._build_k(_index1, _index2,
+                                                        tf_X, tf_X2, D, match_sq,
+                                                        self._gap, self._match,
+                                                        self._coefs, n, order)
+                #print k
+                #print gapg
+                #print matchg
+                #print coefsg
+                #gapg = tf.Print(gapg, gapg)
+                ks.append(k)
+                gapgs.append(gapg)
+                matchgs.append(matchg)
+                coefsgs.append(coefsg)
+            
+            #print ks
+            #print gapgs
+            #print coefsgs
+            k_result = tf.pack(ks)
+            gap_result = tf.pack(gapgs)
+            match_result = tf.pack(matchgs)
+            coefs_result = tf.pack(coefsgs)
+            #all_stuff = [k_result] + gap_result + match_result + coefs_result
+            #all_stuff = [k] + gapg + matchg + coefsg
+            all_stuff = (k_result, gap_result, match_result, coefs_result)
             self.result = all_stuff
 
     def _build_k(self, index1, index2, tf_X, tf_X2, D, match_sq,
@@ -105,9 +136,9 @@ class TFGramStringKernel(object):
         sum1 = tf.reduce_sum(mul1, 1, name='sum1')
         Ki = tf.mul(tf.reduce_sum(sum1, 1, keep_dims=True, name='pre_Ki'), match_sq, name='Ki')
         k_result = tf.matmul(coefs, Ki, name='k_result')
-        gap_grad = tf.gradients(k_result, gap, name='gradients_gap_grad')
-        match_grad = tf.gradients(k_result, match, name='gradients_match_grad')
-        coefs_grad = tf.gradients(k_result, coefs, name='gradients_coefs_grad')
+        gap_grad = tf.gradients(k_result, gap, name='gradients_gap_grad')[0]
+        match_grad = tf.gradients(k_result, match, name='gradients_match_grad')[0]
+        coefs_grad = tf.gradients(k_result, coefs, name='gradients_coefs_grad')[0]
         return k_result, gap_grad, match_grad, coefs_grad
 
     def K(self, X, X2, gram, params):
@@ -127,6 +158,7 @@ class TFGramStringKernel(object):
                 self.maxlen = maxlen
                 self.gram_mode = True
                 self._build_graph(maxlen, order, X)
+            indices = [[i1, i2] for i1 in range(len(X)) for i2 in range(len(X2)) if i1 >= i2]
         else: # We rebuild the graph, usually for predictions
             self.gram_mode = False
             maxlen = max([len(x[0]) for x in np.concatenate((X, X2))])
@@ -134,12 +166,21 @@ class TFGramStringKernel(object):
             X2 = self._code_and_pad(X2, maxlen)
             self.maxlen = maxlen
             self._build_graph(maxlen, order, X, X2)
+            indices = [[i1, i2] for i1 in range(len(X)) for i2 in range(len(X2))]
 
         # Initialize return values
-        k_results = np.zeros(shape=(len(X), len(X2)))
-        gap_grads = np.zeros(shape=(len(X), len(X2)))
-        match_grads = np.zeros(shape=(len(X), len(X2)))
-        coef_grads = np.zeros(shape=(len(X), len(X2), order))
+        #k_results = np.zeros(shape=(len(X), len(X2)))
+        #gap_grads = np.zeros(shape=(len(X), len(X2)))
+        #match_grads = np.zeros(shape=(len(X), len(X2)))
+        #coef_grads = np.zeros(shape=(len(X), len(X2), order))
+        #k_results = np.zeros(len(indices))
+        #gap_grads = np.zeros(len(indices))
+        #match_grads = np.zeros(len(indices))
+        #coef_grads = np.zeros((len(indices), order))
+        k_results = [] 
+        gap_grads = []
+        match_grads = []
+        coef_grads = []
 
         # Add optional tracing for profiling
         if self.trace is not None:
@@ -147,54 +188,89 @@ class TFGramStringKernel(object):
                 trace_level=config_pb2.RunOptions.FULL_TRACE)
             run_metadata = config_pb2.RunMetadata()
         else:
-            run_options=None
-            run_metadata=None
+            run_options = None
+            run_metadata = None
 
         # We start a TF session and run it
         sess = tf.Session(graph=self.graph, config=self.tf_config)
-        for i in xrange(len(X)):
-            for j in xrange(len(X2)):
-                if gram and (j < i):
-                    k_results[i, j] = k_results[j, i]
-                    gap_grads[i, j] = gap_grads[j, i]
-                    match_grads[i, j] = match_grads[j, i]
-                    coef_grads[i, j] = coef_grads[j, i]
-                else:
-                    feed_dict = {self._gap: params[0], 
-                                 self._match: params[1],
-                                 self._coefs: np.array(params[2])[None, :],
-                                 self._index1: i,
-                                 self._index2: j}
-                    import datetime
-                    before = datetime.datetime.now()
-                    k_result, gap_grad, match_grad, coef_grad = sess.run(self.result,
-                                                                         feed_dict=feed_dict,
-                                                                         options=run_options, 
-                                                                         run_metadata=run_metadata)
-                    after = datetime.datetime.now()
-                    print 'SESSION RUN: ',
-                    print after - before
-                    if self.trace is not None:
-                        tl = timeline.Timeline(run_metadata.step_stats, graph=self.graph)
-                        trace = tl.generate_chrome_trace_format()
-                        with open(self.trace, 'w') as f:
-                            f.write(trace)
-                    k_results[i, j] = k_result
-                    gap_grads[i, j] = gap_grad
-                    match_grads[i, j] = match_grad
-                    coef_grads[i, j] = coef_grad
-            
+
+        #########################
+        # for i in xrange(len(X)):
+        #     for j in xrange(len(X2)):
+        #         if gram and (j < i):
+        #             k_results[i, j] = k_results[j, i]
+        #             gap_grads[i, j] = gap_grads[j, i]
+        #             match_grads[i, j] = match_grads[j, i]
+        #             coef_grads[i, j] = coef_grads[j, i]
+        #         else:
+        #             feed_dict = {self._gap: params[0], 
+        #                          self._match: params[1],
+        #                          self._coefs: np.array(params[2])[None, :],
+        #                          self._index1: i,
+        #                          self._index2: j}
+        #             import datetime
+        #             before = datetime.datetime.now()
+        #             k_result, gap_grad, match_grad, coef_grad = sess.run(self.result,
+        #                                                                  feed_dict=feed_dict,
+        #                                                                  options=run_options, 
+        #                                                                  run_metadata=run_metadata)
+        #             after = datetime.datetime.now()
+        #             print 'SESSION RUN: ',
+        #             print after - before
+        #             if self.trace is not None:
+        #                 tl = timeline.Timeline(run_metadata.step_stats, graph=self.graph)
+        #                 trace = tl.generate_chrome_trace_format()
+        #                 with open(self.trace, 'w') as f:
+        #                     f.write(trace)
+        #             k_results[i, j] = k_result
+        #             gap_grads[i, j] = gap_grad
+        #             match_grads[i, j] = match_grad
+        #             coef_grads[i, j] = coef_grad
+        ###########################
+
+        indices_copy = copy.deepcopy(indices)
+        while indices != []:
+            items = indices[:self.BATCH_SIZE]
+            if len(items) < self.BATCH_SIZE:
+                items += [[0, 0]] * (self.BATCH_SIZE - len(items))
+                print items
+
+            feed_dict = {self._gap: params[0], 
+                         self._match: params[1],
+                         self._coefs: np.array(params[2])[None, :],
+                         self._indices: np.array(items)}
+            before = datetime.datetime.now()
+            k, gapg, matchg, coefsg = sess.run(self.result, feed_dict=feed_dict,
+                                               options=run_options, 
+                                               run_metadata=run_metadata)
+            after = datetime.datetime.now()
+            print 'SESSION RUN: ',
+            print after - before
+            if self.trace is not None:
+                tl = timeline.Timeline(run_metadata.step_stats, graph=self.graph)
+                trace = tl.generate_chrome_trace_format()
+                with open(self.trace, 'w') as f:
+                    f.write(trace)
+            for i in xrange(self.BATCH_SIZE):
+                k_results.append(k[i])
+                gap_grads.append(gapg[i])
+                match_grads.append(matchg[i])
+                coef_grads.append(coefsg[i])
+            indices = indices[self.BATCH_SIZE:]
         sess.close()
+        ############################
         
         # Reshape the return values since they are vectors:
-        #if gram:
-        #    lenX2 = None
-        #else:
-        #    lenX2 = len(X2)
-        #k_result = self._triangulate(k_result, self.indices, len(X), lenX2)
-        #gap_grads = self._triangulate(gap_grads, self.indices, len(X), lenX2)
-        #match_grads = self._triangulate(match_grads, self.indices, len(X), lenX2)
-        #coef_grads = self._triangulate(coef_grads, self.indices, len(X), lenX2)
+        if gram:
+            lenX2 = None
+        else:
+            lenX2 = len(X2)
+        #print k_results
+        #print gap_grads
+        k_results = self._triangulate(k_results, indices_copy, len(X), lenX2)
+        gap_grads = self._triangulate(gap_grads, indices_copy, len(X), lenX2)
+        match_grads = self._triangulate(match_grads, indices_copy, len(X), lenX2)
+        coef_grads = self._triangulate(coef_grads, indices_copy, len(X), lenX2)
     
         return k_results, gap_grads, match_grads, coef_grads
 
@@ -218,6 +294,9 @@ class TFGramStringKernel(object):
         Transform the return vectors from the graph into their
         original matrix form.
         """
+        vector = np.squeeze(np.array(vector))
+        print vector
+        print indices
         if lenX2 == None:
             lenX2 = lenX
             gram = True
@@ -231,4 +310,5 @@ class TFGramStringKernel(object):
             result[elem[0], elem[1]] = vector[i]
             if elem[0] != elem[1] and gram:
                 result[elem[1], elem[0]] = vector[i]
+        print result
         return result
