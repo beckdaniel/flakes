@@ -110,14 +110,14 @@ class TFGramStringKernel(object):
             #print ks
             #print gapgs
             #print coefsgs
-            k_result = tf.pack(ks)
-            gap_result = tf.pack(gapgs)
-            match_result = tf.pack(matchgs)
-            coefs_result = tf.pack(coefsgs)
+            #k_result = tf.pack(ks)
+            #gap_result = tf.pack(gapgs)
+            #match_result = tf.pack(matchgs)
+            #coefs_result = tf.pack(coefsgs)
             #all_stuff = [k_result] + gap_result + match_result + coefs_result
             #all_stuff = [k] + gapg + matchg + coefsg
-            all_stuff = (k_result, gap_result, match_result, coefs_result)
-            #all_stuff = ks + gapgs + matchgs + coefsgs
+            #all_stuff = (k_result, gap_result, match_result, coefs_result)
+            all_stuff = ks + gapgs + matchgs + coefsgs
             self.result = all_stuff
 
     def _build_k(self, index1, index2, tf_X, tf_X2, D, match_sq,
@@ -247,16 +247,16 @@ class TFGramStringKernel(object):
                          self._coefs: np.array(params[2])[None, :],
                          self._indices: np.array(items)}
             before = datetime.datetime.now()
-            k, gapg, matchg, coefsg = sess.run(self.result, feed_dict=feed_dict,
-                                               options=run_options, 
-                                               run_metadata=run_metadata)
-            #result = sess.run(self.result, feed_dict=feed_dict,
-            #                  options=run_options, 
-            #                  run_metadata=run_metadata)
-            #k = result[:self.BATCH_SIZE]
-            #gapg = result[self.BATCH_SIZE:(self.BATCH_SIZE * 2)]
-            #matchg = result[(self.BATCH_SIZE * 2):(self.BATCH_SIZE * 3)]
-            #coefsg = result[(self.BATCH_SIZE * 3):]
+            #k, gapg, matchg, coefsg = sess.run(self.result, feed_dict=feed_dict,
+            #                                   options=run_options, 
+            #                                   run_metadata=run_metadata)
+            result = sess.run(self.result, feed_dict=feed_dict,
+                              options=run_options, 
+                              run_metadata=run_metadata)
+            k = result[:self.BATCH_SIZE]
+            gapg = result[self.BATCH_SIZE:(self.BATCH_SIZE * 2)]
+            matchg = result[(self.BATCH_SIZE * 2):(self.BATCH_SIZE * 3)]
+            coefsg = result[(self.BATCH_SIZE * 3):]
             after = datetime.datetime.now()
             print 'SESSION RUN: ',
             print after - before
