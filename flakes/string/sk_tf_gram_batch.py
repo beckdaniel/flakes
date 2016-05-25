@@ -27,12 +27,12 @@ class TFGramBatchStringKernel(object):
             self.tf_config = tf.ConfigProto(
                 gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.9),
             )
-        elif 'cpu' in device:
-            self.tf_config = tf.ConfigProto(
-                use_per_session_threads = 4,
-                intra_op_parallelism_threads = 4,
-                inter_op_parallelism_threads = 4,
-            )
+        #elif 'cpu' in device:
+        #    self.tf_config = tf.ConfigProto(
+        #        use_per_session_threads = 4,
+        #        intra_op_parallelism_threads = 4,
+        #        inter_op_parallelism_threads = 4,
+        #    )
         self.BATCH_SIZE = 20
 
     def _build_graph(self, n, order, X, X2=None):

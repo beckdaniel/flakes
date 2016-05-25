@@ -63,7 +63,7 @@ class StringKernel(object):
         elif mode == 'tf-batch':
             self._implementation = TFBatchStringKernel(embs, device)
         elif mode == 'tf-gram-batch':
-            self._implementation = TFGramBatchStringKernel(embs, device)
+            self._implementation = TFGramBatchStringKernel(embs, device=device, trace=trace)
         elif mode == 'numpy':
             self._implementation = NumpyStringKernel(embs)
         elif mode == 'naive':
