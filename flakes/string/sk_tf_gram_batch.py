@@ -27,7 +27,8 @@ class TFGramBatchStringKernel(object):
             self.tf_config = tf.ConfigProto(
                 gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.9),
             )
-        #elif 'cpu' in device:
+        elif 'cpu' in device:
+            self.tf_config = None
         #    self.tf_config = tf.ConfigProto(
         #        use_per_session_threads = 4,
         #        intra_op_parallelism_threads = 4,
