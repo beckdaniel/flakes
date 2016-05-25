@@ -204,7 +204,6 @@ class TFGramBatchStringKernel(object):
             #coefsg = result[(self.BATCH_SIZE * 3):]
             after = datetime.datetime.now()
             k, gapg, matchg, coefsg = result
-            print k
             print 'SESSION RUN: ',
             print after - before
             if self.trace is not None:
