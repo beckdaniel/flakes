@@ -29,12 +29,13 @@ class TFGramStringKernel(object):
                 device_count = {'gpu': 1}
             )
         elif 'cpu' in device:
+            #self.tf_config = None
             self.tf_config = tf.ConfigProto(
-                use_per_session_threads = 4,
-                intra_op_parallelism_threads = 4,
-                inter_op_parallelism_threads = 4,
+            #    use_per_session_threads = 4,
+                intra_op_parallelism_threads = 1,
+                inter_op_parallelism_threads = 2,
             )
-        self.BATCH_SIZE = 20
+        self.BATCH_SIZE = 100
 
     def _build_graph(self, n, order, X, X2=None):
         """
@@ -166,14 +167,17 @@ class TFGramStringKernel(object):
                 self.maxlen = maxlen
                 self.gram_mode = True
                 self._build_graph(maxlen, order, X)
+                self.sess = tf.Session(graph=self.graph, config=self.tf_config)
             indices = [[i1, i2] for i1 in range(len(X)) for i2 in range(len(X2)) if i1 >= i2]
         else: # We rebuild the graph, usually for predictions
+            self.sess.close()
             self.gram_mode = False
             maxlen = max([len(x[0]) for x in np.concatenate((X, X2))])
             X = self._code_and_pad(X, maxlen)
             X2 = self._code_and_pad(X2, maxlen)
             self.maxlen = maxlen
             self._build_graph(maxlen, order, X, X2)
+            self.sess = tf.Session(graph=self.graph, config=self.tf_config)
             indices = [[i1, i2] for i1 in range(len(X)) for i2 in range(len(X2))]
 
         # Initialize return values
@@ -200,7 +204,7 @@ class TFGramStringKernel(object):
             run_metadata = None
 
         # We start a TF session and run it
-        sess = tf.Session(graph=self.graph, config=self.tf_config)
+        #sess = tf.Session(graph=self.graph, config=self.tf_config)
 
         #########################
         # for i in xrange(len(X)):
@@ -250,7 +254,7 @@ class TFGramStringKernel(object):
             #k, gapg, matchg, coefsg = sess.run(self.result, feed_dict=feed_dict,
             #                                   options=run_options, 
             #                                   run_metadata=run_metadata)
-            result = sess.run(self.result, feed_dict=feed_dict,
+            result = self.sess.run(self.result, feed_dict=feed_dict,
                               options=run_options, 
                               run_metadata=run_metadata)
             k = result[:self.BATCH_SIZE]
@@ -258,8 +262,8 @@ class TFGramStringKernel(object):
             matchg = result[(self.BATCH_SIZE * 2):(self.BATCH_SIZE * 3)]
             coefsg = result[(self.BATCH_SIZE * 3):]
             after = datetime.datetime.now()
-            print 'SESSION RUN: ',
-            print after - before
+            #print 'SESSION RUN: ',
+            #print after - before
             if self.trace is not None:
                 tl = timeline.Timeline(run_metadata.step_stats, graph=self.graph)
                 trace = tl.generate_chrome_trace_format()
@@ -271,7 +275,7 @@ class TFGramStringKernel(object):
                 match_grads.append(matchg[i])
                 coef_grads.append(coefsg[i])
             indices = indices[self.BATCH_SIZE:]
-        sess.close()
+        #sess.close()
         ############################
         
         # Reshape the return values since they are vectors:

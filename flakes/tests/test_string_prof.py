@@ -110,7 +110,7 @@ class StringKernelProfiling(unittest.TestCase):
         print result2
         print after - before
 
-    @unittest.skip('profiling')
+    #@unittest.skip('profiling')
     def test_prof_gram_1(self):
         self.k_tf_gram.order_coefs = [0.1, 0.2, 0.4, 0.5, 0.7]#, 1, 1, 1] + 32 * [1.0]
         self.k_tf_gram.gap_decay = 0.8
@@ -121,15 +121,15 @@ class StringKernelProfiling(unittest.TestCase):
         #self.k_np.order_coefs = [0.1, 0.2, 0.4, 0.5, 0.7, 1, 1, 1]
         #self.k_np.decay = 0.8
         print "START PROF GRAM"
-        X = [[self.s3]] * 50
-        X2 = [[self.s4]] * 50
+        X = [[self.s3]] * 20
+        X2 = [[self.s4]] * 20
         before = datetime.datetime.now()
         result2 = self.k_tf_gram.K(X, X2)
         after = datetime.datetime.now()
         print result2
         print after - before
 
-    #@unittest.skip('profiling')
+    @unittest.skip('profiling')
     def test_prof_gram_batch_1(self):
         self.k_tf_gram_batch.order_coefs = [0.1, 0.2, 0.4, 0.5, 0.7]#, 1, 1, 1] + 32 * [1.0]
         self.k_tf_gram_batch.gap_decay = 0.8
