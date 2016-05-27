@@ -134,7 +134,7 @@ class TFGramStringKernel(object):
         # Kp calculation
         Kp = []
         Kp.append(tf.ones(shape=(n, n)))
-        for i in xrange(order):
+        for i in xrange(order - 1):
             aux1 = tf.mul(S, Kp[i])#, name="aux1_%d" % i)
             aux2 = tf.transpose(tf.matmul(aux1, D) * match_sq)#, name="aux2_%d" % i)
             aux3 = tf.transpose(tf.matmul(aux2, D))#, name="aux3_%d" % i)
@@ -143,7 +143,8 @@ class TFGramStringKernel(object):
 
         # Final calculation. We gather all Kps and
         # multiply then by their coeficients.
-        mul1 = tf.mul(S, final_Kp[:order, :, :])#, name='mul1')
+        #mul1 = tf.mul(S, final_Kp[:order, :, :])#, name='mul1')
+        mul1 = tf.mul(S, final_Kp)
         sum1 = tf.reduce_sum(mul1, 1)#, name='sum1')
         Ki = tf.mul(tf.reduce_sum(sum1, 1, keep_dims=True), match_sq)#, name='Ki')
         k_result = tf.matmul(coefs, Ki)#, name='k_result')

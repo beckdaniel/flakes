@@ -209,13 +209,13 @@ class StringKernelTests(unittest.TestCase):
         g_result = (g_result1 - g_result2) / (2 * E)
         self.assertAlmostEqual(np.sum(true_grads)/100, np.sum(g_result)/100, places=2)
 
-    @unittest.skip('skipping old gram')
+    #@unittest.skip('skipping old gram')
     def test_compare_gram_based(self):
         #X = [[self.s1], [self.s2], [self.s3], [self.s4]]
         X = [[self.s1], [self.s2], [self.s3]]
-        self.k_tf.order_coefs = [0.1, 0.2, 0.4, 0.5, 0.7]
-        self.k_tf.decay = 0.8
-        result1 = self.k_tf.K(X)
+        self.k_slow.order_coefs = [0.1, 0.2, 0.4, 0.5, 0.7]
+        self.k_slow.decay = 0.8
+        result1 = self.k_slow.K(X)
         self.k_tf_gram.order_coefs = [0.1, 0.2, 0.4, 0.5, 0.7]
         self.k_tf_gram.decay = 0.8
         result2 = self.k_tf_gram.K(X)
