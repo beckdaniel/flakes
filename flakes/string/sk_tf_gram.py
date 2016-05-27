@@ -62,10 +62,8 @@ class TFGramStringKernel(object):
             self._gap = tf.placeholder("float", [], name='gap_decay')
             self._match = tf.placeholder("float", [], name='match_decay')
             self._coefs = tf.placeholder("float", [1, order], name='coefs')
-            #self._index1 = tf.placeholder("int32", [], name='index1')
-            #self._index2 = tf.placeholder("int32", [], name='index2')
             self._indices = tf.placeholder("float32", [self.BATCH_SIZE, 2], name='indices')
-            #match_sq = tf.pow(self._match, 2, name='match_sq')
+
 
             # Triangular matrices over decay powers.
             power = np.ones((n, n))
@@ -74,10 +72,22 @@ class TFGramStringKernel(object):
             for k in xrange(n-1):
                 power[i2-k-1 == i1] = k
                 tril[i2-k-1 == i1] = 1.0
-            #tf_tril = tf.constant(tril, dtype=tf.float32, name='tril')
-            #tf_power = tf.constant(power, dtype=tf.float32, name='power')
-            #gaps = tf.fill([n, n], self._gap, name='gaps')
-            #D = tf.pow(tf.mul(gaps, tril), power, name='D_matrix')
+            tf_tril = tf.constant(tril, dtype=tf.float32, name='tril')
+            tf_power = tf.constant(power, dtype=tf.float32, name='power')
+            gaps = tf.fill([n, n], self._gap, name='gaps')
+            D = tf.pow(tf.mul(gaps, tf_tril), tf_power, name='D_matrix')
+            dD_dgap = tf.pow((tf_tril * gaps), (tf_power - 1.0)) * tf_tril * tf_power
+            #dD_dgap = tf.mul(tf.mul(tf_power, tf_tril), gaps, name='dD_dgap')
+
+            ####
+            sum_dD_dgap = tf.reduce_sum(dD_dgap)
+            dD_dgap = tf.Print(dD_dgap, [sum_dD_dgap], summarize=100)
+            
+            true_dD_dgap = tf.gradients(D, self._gap)
+            dD_dgap = tf.Print(dD_dgap, true_dD_dgap, summarize=100)
+            ####
+
+            match_sq = tf.pow(self._match, 2, name='match_sq')
 
             ks = [] 
             gapgs = []
@@ -86,20 +96,14 @@ class TFGramStringKernel(object):
 
             # Kernel calculation + gradients
             for i in xrange(self.BATCH_SIZE):
-
-                tf_tril = tf.constant(tril, dtype=tf.float32, name='tril')
-                tf_power = tf.constant(power, dtype=tf.float32, name='power')
-                gaps = tf.fill([n, n], self._gap, name='gaps')
-                D = tf.pow(tf.mul(gaps, tril), power, name='D_matrix')
-                match_sq = tf.pow(self._match, 2, name='match_sq')
-
                 _index = tf.gather(self._indices, i, name='index_%d' % i)
                 _index1 = tf.to_int32(tf.gather(_index, 0, name='index1_%d' % i))
                 _index2 = tf.to_int32(tf.gather(_index, 1, name='index2_%d' % i))
                 k, gapg, matchg, coefsg = self._build_k(_index1, _index2,
                                                         tf_X, tf_X2, D, match_sq,
                                                         self._gap, self._match,
-                                                        self._coefs, n, order)
+                                                        self._coefs, n, order,
+                                                        dD_dgap)
                 #print k
                 #print gapg
                 #print matchg
@@ -124,7 +128,7 @@ class TFGramStringKernel(object):
             self.result = all_stuff
 
     def _build_k(self, index1, index2, tf_X, tf_X2, D, match_sq,
-                 gap, match, coefs, n, order):
+                 gap, match, coefs, n, order, dD_dgap):
         # Select the inputs from the pre-loaded
         # dataset
         mat1 = tf.gather(tf_X, index1)#, name='mat1')
@@ -133,25 +137,61 @@ class TFGramStringKernel(object):
 
         # Kp calculation
         Kp = []
+        dKp_dgap = []
+        dKp_dmatch = []
         Kp.append(tf.ones(shape=(n, n)))
+        dKp_dgap.append(tf.zeros(shape=(n, n)))
+        dKp_dmatch.append(tf.zeros(shape=(n, n)))
+
         for i in xrange(order - 1):
-            aux1 = tf.mul(S, Kp[i])#, name="aux1_%d" % i)
-            aux2 = tf.transpose(tf.matmul(aux1, D) * match_sq)#, name="aux2_%d" % i)
-            aux3 = tf.transpose(tf.matmul(aux2, D))#, name="aux3_%d" % i)
-            Kp.append(aux3)
+            aux1 = tf.mul(S, Kp[i])
+            aux2 = tf.matmul(tf.transpose(D), aux1)
+            aux3 = aux2 * match_sq
+            aux4 = tf.matmul(aux3, D)
+            Kp.append(aux4)
+            
+            daux1_dgap = tf.mul(S, dKp_dgap[i])
+            daux2_dgap = (tf.matmul(tf.transpose(dD_dgap), aux1) +
+                          tf.matmul(tf.transpose(D), daux1_dgap))
+            daux3_dgap = daux2_dgap * match_sq
+            daux4_dgap = (tf.matmul(daux3_dgap, D) +
+                          tf.matmul(aux3, dD_dgap))
+            dKp_dgap.append(daux4_dgap)
+
+
+            daux1_dmatch = tf.mul(S, dKp_dmatch[i])
+            daux2_dmatch = tf.matmul(tf.transpose(D), daux1_dmatch)
+            daux3_dmatch = (daux2_dmatch * match_sq) + (2 * match * aux2)
+            daux4_dmatch = tf.matmul(daux3_dmatch, D)
+            dKp_dmatch.append(daux4_dmatch)
+
         final_Kp = tf.pack(Kp)
+        final_dKp_dgap = tf.pack(dKp_dgap)
+        final_dKp_dmatch = tf.pack(dKp_dmatch)
 
         # Final calculation. We gather all Kps and
         # multiply then by their coeficients.
-        #mul1 = tf.mul(S, final_Kp[:order, :, :])#, name='mul1')
         mul1 = tf.mul(S, final_Kp)
-        sum1 = tf.reduce_sum(mul1, 1)#, name='sum1')
-        Ki = tf.mul(tf.reduce_sum(sum1, 1, keep_dims=True), match_sq)#, name='Ki')
-        k_result = tf.matmul(coefs, Ki)#, name='k_result')
-        gap_grad = tf.gradients(k_result, gap, colocate_gradients_with_ops=True)[0]#, name='gradients_gap_grad')[0]
-        match_grad = tf.gradients(k_result, match, colocate_gradients_with_ops=True)[0]#, name='gradients_match_grad')[0]
-        coefs_grad = tf.gradients(k_result, coefs, colocate_gradients_with_ops=True)[0]#, name='gradients_coefs_grad')[0]
-        return k_result, gap_grad, match_grad, coefs_grad
+        sum1 = tf.reduce_sum(mul1, 1)
+        sum2 = tf.reduce_sum(sum1, 1, keep_dims=True)
+        Ki = tf.mul(sum2, match_sq)
+        k_result = tf.matmul(coefs, Ki)
+        
+        dmul1_dgap = tf.mul(S, final_dKp_dgap)
+        dsum1_dgap = tf.reduce_sum(dmul1_dgap, 1)
+        dsum2_dgap = tf.reduce_sum(dsum1_dgap, 1, keep_dims=True)
+        dKi_dgap = tf.mul(dsum2_dgap, match_sq)
+        dk_dgap = tf.matmul(coefs, dKi_dgap)
+
+        dmul1_dmatch = tf.mul(S, final_dKp_dmatch)
+        dsum1_dmatch = tf.reduce_sum(dmul1_dmatch, 1)
+        dsum2_dmatch = ((tf.reduce_sum(dsum1_dmatch, 1, keep_dims=True) * match_sq) +
+                        (2 * match * sum2))
+        dk_dmatch = tf.matmul(coefs, dsum2_dmatch)
+
+        dk_dcoefs = Ki
+
+        return k_result, dk_dgap, dk_dmatch, dk_dcoefs
 
     def K(self, X, X2, gram, params):
         """

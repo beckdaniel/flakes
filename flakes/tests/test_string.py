@@ -209,20 +209,70 @@ class StringKernelTests(unittest.TestCase):
         g_result = (g_result1 - g_result2) / (2 * E)
         self.assertAlmostEqual(np.sum(true_grads)/100, np.sum(g_result)/100, places=2)
 
+    def test_gradient_match_3(self):
+        #self.k_tf.order_coefs = [0.1, 0.2, 0.4, 0.5, 0.7]
+        self.k_tf_gram.order_coefs = [0.1] * 2
+        self.k_tf_gram.gap_decay = 0.8
+        self.k_tf_gram.match_decay = 0.8
+        X = [[self.s1], [self.s2], [self.s3], [self.s4]]
+        result = self.k_tf_gram.K(X)
+        true_grads = self.k_tf_gram.match_grads
+
+        E = 1e-4
+        self.k_tf_gram.match_decay = 0.8 + E
+        g_result1 = self.k_tf_gram.K(X)
+        self.k_tf_gram.match_decay = 0.8 - E
+        g_result2 = self.k_tf_gram.K(X)
+        print "GRAM GRADS"
+        print g_result1
+        print g_result2
+        print true_grads
+
+        g_result = (g_result1 - g_result2) / (2 * E)
+        print g_result
+        self.assertAlmostEqual(np.sum(true_grads)/100, np.sum(g_result)/100, places=2)
+
     #@unittest.skip('skipping old gram')
     def test_compare_gram_based(self):
         #X = [[self.s1], [self.s2], [self.s3], [self.s4]]
         X = [[self.s1], [self.s2], [self.s3]]
         self.k_slow.order_coefs = [0.1, 0.2, 0.4, 0.5, 0.7]
-        self.k_slow.decay = 0.8
+        self.k_slow.gap_decay = 0.8
+        self.k_slow.match_decay = 0.8
         result1 = self.k_slow.K(X)
         self.k_tf_gram.order_coefs = [0.1, 0.2, 0.4, 0.5, 0.7]
-        self.k_tf_gram.decay = 0.8
+        self.k_tf_gram.gap_decay = 0.8
+        self.k_tf_gram.match_decay = 0.8
         result2 = self.k_tf_gram.K(X)
-        print "NORMAL"
+        print "SLOW"
         print result1
         print "GRAM"
         print result2
+        self.assertAlmostEqual(np.sum(result1) / 1000, np.sum(result2) / 1000, places=2)
+
+    def test_compare_gram_based_2(self):
+        #X = [[self.s1], [self.s2], [self.s3], [self.s4]]
+        X = [[self.s1], [self.s2], [self.s3]]
+        self.k_tf.order_coefs = [0.1, 0.2, 0.4, 0.5, 0.7]
+        self.k_tf.gap_decay = 0.8
+        self.k_tf.match_decay = 0.8
+        result1 = self.k_tf.K(X)
+        self.k_tf_gram.order_coefs = [0.1, 0.2, 0.4, 0.5, 0.7]
+        self.k_tf_gram.gap_decay = 0.8
+        self.k_tf_gram.match_decay = 0.8
+        result2 = self.k_tf_gram.K(X)
+        np.set_printoptions(suppress=True)
+        print "NORMAL"
+        print result1
+        print self.k_tf.gap_grads
+        print self.k_tf.match_grads
+        print self.k_tf.coef_grads
+        print "GRAM"
+        print result2
+        print self.k_tf_gram.gap_grads
+        print self.k_tf_gram.match_grads
+        print self.k_tf_gram.coef_grads
+
         self.assertAlmostEqual(np.sum(result1), np.sum(result2), places=7)
 
     def test_compare_gram_batch_based(self):
