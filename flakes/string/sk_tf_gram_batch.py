@@ -74,7 +74,9 @@ class TFGramBatchStringKernel(object):
             tf_tril = tf.constant(tril, dtype=tf.float32, name='tril')
             tf_power = tf.constant(power, dtype=tf.float32, name='power')
             gaps = tf.fill([n, n], self._gap, name='gaps')
-            D = tf.pow(tf.mul(gaps, tril), power, name='D_matrix')
+            D = tf.pow(tf.mul(gaps, tf_tril), tf_power, name='D_matrix')
+            dD_dgap = tf.pow((tf_tril * gaps), (tf_power - 1.0)) * tf_tril * tf_power
+
             match_sq = tf.pow(self._match, 2, name='match_sq')
 
             # Gather matlists and generate similarity matrices
@@ -84,38 +86,90 @@ class TFGramBatchStringKernel(object):
             
             # Kp calculation
             Kp = []
+            dKp_dgap = []
+            dKp_dmatch = []
             Kp.append(tf.ones(shape=(self.BATCH_SIZE, n, n)))
-            for i in xrange(order):
-                aux1 = tf.mul(S, Kp[i])#, name="aux1_%d" % i)
+            dKp_dgap.append(tf.zeros(shape=(self.BATCH_SIZE, n, n)))
+            dKp_dmatch.append(tf.zeros(shape=(self.BATCH_SIZE, n, n)))
+
+            for i in xrange(order - 1):
+                aux1 = tf.mul(S, Kp[i])
                 aux2 = tf.reshape(aux1, tf.pack([self.BATCH_SIZE * n, n]))
-                aux3 = tf.matmul(aux2, D) * match_sq
-                aux4 = tf.reshape(aux3, tf.pack([self.BATCH_SIZE, n, n]))
-                aux5 = tf.transpose(aux4, perm=[0, 2, 1])
-                aux6 = tf.reshape(aux5, tf.pack([self.BATCH_SIZE * n, n]))
-                aux7 = tf.matmul(aux6, D)
-                aux8 = tf.reshape(aux7, tf.pack([self.BATCH_SIZE, n, n]))
-                aux9 = tf.transpose(aux8, perm=[0, 2, 1])
-                Kp.append(aux9)
+                aux3 = tf.matmul(aux2, D)
+                aux4 = aux3 * match_sq
+                aux5 = tf.reshape(aux4, tf.pack([self.BATCH_SIZE, n, n]))
+                aux6 = tf.transpose(aux5, perm=[0, 2, 1])
+                aux7 = tf.reshape(aux6, tf.pack([self.BATCH_SIZE * n, n]))
+                aux8 = tf.matmul(aux7, D)
+                aux9 = tf.reshape(aux8, tf.pack([self.BATCH_SIZE, n, n]))
+                aux10 = tf.transpose(aux9, perm=[0, 2, 1])
+                Kp.append(aux10)
+
+                daux1_dgap = tf.mul(S, dKp_dgap[i])
+                daux2_dgap = tf.reshape(daux1_dgap, tf.pack([self.BATCH_SIZE * n, n]))
+                daux3_dgap = tf.matmul(daux2_dgap, D) + tf.matmul(aux2, dD_dgap)
+                daux4_dgap = daux3_dgap * match_sq
+                daux5_dgap = tf.reshape(daux4_dgap, tf.pack([self.BATCH_SIZE, n, n]))
+                daux6_dgap = tf.transpose(daux5_dgap, perm=[0, 2, 1])
+                daux7_dgap = tf.reshape(daux6_dgap, tf.pack([self.BATCH_SIZE * n, n]))
+                daux8_dgap = tf.matmul(daux7_dgap, D) + tf.matmul(aux7, dD_dgap)
+                daux9_dgap = tf.reshape(daux8_dgap, tf.pack([self.BATCH_SIZE, n, n]))
+                daux10_dgap = tf.transpose(daux9_dgap, perm=[0, 2, 1])
+                dKp_dgap.append(daux10_dgap)
+
+                daux1_dmatch = tf.mul(S, dKp_dmatch[i])
+                daux2_dmatch = tf.reshape(daux1_dmatch, tf.pack([self.BATCH_SIZE * n, n]))
+                daux3_dmatch = tf.matmul(daux2_dmatch, D)
+                daux4_dmatch = (daux3_dmatch * match_sq) + (2 * self._match * aux3)
+                daux5_dmatch = tf.reshape(daux4_dmatch, tf.pack([self.BATCH_SIZE, n, n]))
+                daux6_dmatch = tf.transpose(daux5_dmatch, perm=[0, 2, 1])
+                daux7_dmatch = tf.reshape(daux6_dmatch, tf.pack([self.BATCH_SIZE * n, n]))
+                daux8_dmatch = tf.matmul(daux7_dmatch, D)
+                daux9_dmatch = tf.reshape(daux8_dmatch, tf.pack([self.BATCH_SIZE, n, n]))
+                daux10_dmatch = tf.transpose(daux9_dmatch, perm=[0, 2, 1])
+                dKp_dmatch.append(daux10_dmatch)
+
             final_Kp = tf.pack(Kp)
+            final_dKp_dgap = tf.pack(dKp_dgap)
+            final_dKp_dmatch = tf.pack(dKp_dmatch)
 
             # Final calculation. We gather all Kps and
             # multiply then by their coeficients.
-            mul1 = tf.mul(S, final_Kp[:order, :, :, :])#, name='mul1')
+            mul1 = tf.mul(S, final_Kp)#[:order, :, :, :])#, name='mul1')
             sum1 = tf.reduce_sum(mul1, 2)#, name='sum1')
-            Ki = tf.mul(tf.reduce_sum(sum1, 2, keep_dims=True), match_sq)#, name='Ki')
+            sum2 = tf.reduce_sum(sum1, 2, keep_dims=True)
+            Ki = tf.mul(sum2, match_sq)#, name='Ki')
             Ki = tf.squeeze(Ki, squeeze_dims=[2])
             k_result = tf.squeeze(tf.matmul(self._coefs, Ki))
-            gap_grad = []
-            match_grad = []
-            coefs_grad = []
-            for i in xrange(self.BATCH_SIZE):
-                gap_grad.append(tf.gradients(k_result[i], self._gap)[0])
-                match_grad.append(tf.gradients(k_result[i], self._match)[0])
-                coefs_grad.append(tf.gradients(k_result[i], self._coefs)[0])
+
+            dmul1_dgap = tf.mul(S, final_dKp_dgap)
+            dsum1_dgap = tf.reduce_sum(dmul1_dgap, 2)
+            dsum2_dgap = tf.reduce_sum(dsum1_dgap, 2, keep_dims=True)
+            dKi_dgap = tf.mul(dsum2_dgap, match_sq)
+            dKi_dgap = tf.squeeze(dKi_dgap, squeeze_dims=[2])
+            dk_dgap = tf.squeeze(tf.matmul(self._coefs, dKi_dgap))
+
+            dmul1_dmatch = tf.mul(S, final_dKp_dmatch)
+            dsum1_dmatch = tf.reduce_sum(dmul1_dmatch, 2)
+            dsum2_dmatch = tf.reduce_sum(dsum1_dmatch, 2, keep_dims=True)
+            dKi_dmatch = tf.mul(dsum2_dmatch, match_sq) + (2 * self._match * sum2)
+            dKi_dmatch = tf.squeeze(dKi_dmatch, squeeze_dims=[2])
+            dk_dmatch = tf.squeeze(tf.matmul(self._coefs, dKi_dmatch))
+
+            #gap_grad = []
+            #match_grad = []
+            #coefs_grad = []
+            #for i in xrange(self.BATCH_SIZE):
+                #gap_grad.append(tf.gradients(k_result[i], self._gap)[0])
+                #match_grad.append(tf.gradients(k_result[i], self._match)[0])
+                #coefs_grad.append(tf.gradients(k_result[i], self._coefs)[0])
                 
-            gap_grads = tf.pack(gap_grad)
-            match_grads = tf.pack(match_grad)
-            coefs_grads = tf.pack(coefs_grad)
+            #gap_grads = tf.pack(gap_grad)
+            gap_grads = dk_dgap
+            match_grads = dk_dmatch
+            #match_grads = tf.pack(match_grad)
+            #coefs_grads = tf.pack(coefs_grad)
+            coefs_grads = Ki
             #gap_grad = fops.map_fn(lambda k: tf.gradients(k, self._gap)[0], k_result)
             
             #gap_grad = tf.gradients(k_result, gap, colocate_gradients_with_ops=True)[0]#, name='gradients_gap_grad')[0]
@@ -207,6 +261,7 @@ class TFGramBatchStringKernel(object):
             k, gapg, matchg, coefsg = result
             print 'SESSION RUN: ',
             print after - before
+            print result
             if self.trace is not None:
                 tl = timeline.Timeline(run_metadata.step_stats, graph=self.graph)
                 trace = tl.generate_chrome_trace_format()
@@ -216,7 +271,7 @@ class TFGramBatchStringKernel(object):
                 k_results.append(k[i])
                 gap_grads.append(gapg[i])
                 match_grads.append(matchg[i])
-                coef_grads.append(coefsg[i])
+                coef_grads.append(coefsg[:, i])
             indices = indices[self.BATCH_SIZE:]
         sess.close()
         ############################
