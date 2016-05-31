@@ -156,27 +156,9 @@ class TFGramBatchStringKernel(object):
             dKi_dmatch = tf.squeeze(dKi_dmatch, squeeze_dims=[2])
             dk_dmatch = tf.squeeze(tf.matmul(self._coefs, dKi_dmatch))
 
-            #gap_grad = []
-            #match_grad = []
-            #coefs_grad = []
-            #for i in xrange(self.BATCH_SIZE):
-                #gap_grad.append(tf.gradients(k_result[i], self._gap)[0])
-                #match_grad.append(tf.gradients(k_result[i], self._match)[0])
-                #coefs_grad.append(tf.gradients(k_result[i], self._coefs)[0])
-                
-            #gap_grads = tf.pack(gap_grad)
-            gap_grads = dk_dgap
-            match_grads = dk_dmatch
-            #match_grads = tf.pack(match_grad)
-            #coefs_grads = tf.pack(coefs_grad)
-            coefs_grads = Ki
-            #gap_grad = fops.map_fn(lambda k: tf.gradients(k, self._gap)[0], k_result)
-            
-            #gap_grad = tf.gradients(k_result, gap, colocate_gradients_with_ops=True)[0]#, name='gradients_gap_grad')[0]
-            #match_grad = tf.gradients(k_result, match, colocate_gradients_with_ops=True)[0]#, name='gradients_match_grad')[0]
-            #coefs_grad = tf.gradients(k_result, coefs, colocate_gradients_with_ops=True)[0]#, name='gradients_coefs_grad')[0]
-            #self.result = (k_result, gap_grads, k_result, k_result)
-            self.result = (k_result, gap_grads, match_grads, coefs_grads)
+            dk_dcoefs = Ki
+
+            self.result = (k_result, dk_dgap, dk_dmatch, dk_dcoefs)
 
 
     def K(self, X, X2, gram, params):
@@ -207,14 +189,6 @@ class TFGramBatchStringKernel(object):
             indices = [[i1, i2] for i1 in range(len(X)) for i2 in range(len(X2))]
 
         # Initialize return values
-        #k_results = np.zeros(shape=(len(X), len(X2)))
-        #gap_grads = np.zeros(shape=(len(X), len(X2)))
-        #match_grads = np.zeros(shape=(len(X), len(X2)))
-        #coef_grads = np.zeros(shape=(len(X), len(X2), order))
-        #k_results = np.zeros(len(indices))
-        #gap_grads = np.zeros(len(indices))
-        #match_grads = np.zeros(len(indices))
-        #coef_grads = np.zeros((len(indices), order))
         k_results = [] 
         gap_grads = []
         match_grads = []
@@ -247,21 +221,13 @@ class TFGramBatchStringKernel(object):
                          self._indices2: np.array(items2)
             }
             before = datetime.datetime.now()
-            #k, gapg, matchg, coefsg = sess.run(self.result, feed_dict=feed_dict,
-            #                                   options=run_options, 
-            #                                   run_metadata=run_metadata)
             result = sess.run(self.result, feed_dict=feed_dict,
                               options=run_options, 
                               run_metadata=run_metadata)
-            #k = result[:self.BATCH_SIZE]
-            #gapg = result[self.BATCH_SIZE:(self.BATCH_SIZE * 2)]
-            #matchg = result[(self.BATCH_SIZE * 2):(self.BATCH_SIZE * 3)]
-            #coefsg = result[(self.BATCH_SIZE * 3):]
             after = datetime.datetime.now()
             k, gapg, matchg, coefsg = result
             print 'SESSION RUN: ',
             print after - before
-            print result
             if self.trace is not None:
                 tl = timeline.Timeline(run_metadata.step_stats, graph=self.graph)
                 trace = tl.generate_chrome_trace_format()
@@ -281,8 +247,6 @@ class TFGramBatchStringKernel(object):
             lenX2 = None
         else:
             lenX2 = len(X2)
-        #print k_results
-        #print gap_grads
         k_results = self._triangulate(k_results, indices_copy, len(X), lenX2)
         gap_grads = self._triangulate(gap_grads, indices_copy, len(X), lenX2)
         match_grads = self._triangulate(match_grads, indices_copy, len(X), lenX2)
