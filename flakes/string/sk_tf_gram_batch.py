@@ -229,9 +229,9 @@ class TFGramBatchStringKernel(object):
         #print k_results
         #print gap_grads
         k_results = self._triangulate(k_results, indices_copy, len(X), lenX2)
-        #gap_grads = self._triangulate(gap_grads, indices_copy, len(X), lenX2)
-        #match_grads = self._triangulate(match_grads, indices_copy, len(X), lenX2)
-        #coef_grads = self._triangulate(coef_grads, indices_copy, len(X), lenX2)
+        gap_grads = self._triangulate(gap_grads, indices_copy, len(X), lenX2)
+        match_grads = self._triangulate(match_grads, indices_copy, len(X), lenX2)
+        coef_grads = self._triangulate(coef_grads, indices_copy, len(X), lenX2)
     
         return k_results, gap_grads, match_grads, coef_grads
 

@@ -273,22 +273,38 @@ class StringKernelTests(unittest.TestCase):
         print self.k_tf_gram.match_grads
         print self.k_tf_gram.coef_grads
 
-        self.assertAlmostEqual(np.sum(result1), np.sum(result2), places=7)
+        self.assertAlmostEqual(np.sum(result1), np.sum(result2), places=2)
+        self.assertAlmostEqual(np.sum(self.k_tf.gap_grads), np.sum(self.k_tf_gram.gap_grads), places=2)
+        self.assertAlmostEqual(np.sum(self.k_tf.match_grads)/1000, np.sum(self.k_tf_gram.match_grads)/1000, places=2)
+        self.assertAlmostEqual(np.sum(self.k_tf.coef_grads)/1000, np.sum(self.k_tf_gram.coef_grads)/1000, places=2)
 
     def test_compare_gram_batch_based(self):
         #X = [[self.s1], [self.s2], [self.s3], [self.s4]]
         X = [[self.s1], [self.s2], [self.s3]]
         self.k_tf.order_coefs = [0.1, 0.2, 0.4, 0.5, 0.7]
-        self.k_tf.decay = 0.8
+        self.k_tf.gap_decay = 0.8
+        self.k_tf.match_decay = 0.8
         result1 = self.k_tf.K(X)
         self.k_tf_gram_batch.order_coefs = [0.1, 0.2, 0.4, 0.5, 0.7]
-        self.k_tf_gram_batch.decay = 0.8
+        self.k_tf_gram_batch.gap_decay = 0.8
+        self.k_tf_gram_batch.match_decay = 0.8
         result2 = self.k_tf_gram_batch.K(X)
+        np.set_printoptions(suppress=True)
         print "NORMAL"
         print result1
+        print self.k_tf.gap_grads
+        print self.k_tf.match_grads
+        print self.k_tf.coef_grads
         print "GRAM BATCH"
         print result2
-        self.assertAlmostEqual(np.sum(result1), np.sum(result2), places=7)
+        print self.k_tf_gram_batch.gap_grads
+        print self.k_tf_gram_batch.match_grads
+        print self.k_tf_gram_batch.coef_grads
+
+        self.assertAlmostEqual(np.sum(result1), np.sum(result2), places=2)
+        self.assertAlmostEqual(np.sum(self.k_tf.gap_grads), np.sum(self.k_tf_gram_batch.gap_grads), places=2)
+        self.assertAlmostEqual(np.sum(self.k_tf.match_grads)/1000, np.sum(self.k_tf_gram_batch.match_grads)/1000, places=2)
+        self.assertAlmostEqual(np.sum(self.k_tf.coef_grads)/1000, np.sum(self.k_tf_gram_batch.coef_grads)/1000, places=2)
 
     @unittest.skip('batch-based is not 100% done')
     def test_compare_row_based(self):
