@@ -2,141 +2,278 @@ import tensorflow as tf
 import numpy as np
 from tensorflow.python.ops import control_flow_ops as cfops
 from tensorflow.python.ops import tensor_array_ops as taops
-
-BATCH_SIZE = 500
+from tensorflow.python.ops import functional_ops as fops
+from sk_util import build_input_matrix
+import sys
+from tensorflow.core.protobuf import config_pb2
+from tensorflow.python.client import timeline
+import json
+import datetime
+import copy
 
 class TFBatchStringKernel(object):
     """
     A TensorFlow string kernel implementation.
     """
-    def __init__(self, gap_decay=1.0, match_decay=1.0,
-                 order_coefs=[1.0], device='/cpu:0'):    
-        self.gap_decay = gap_decay
-        self.match_decay = match_decay
-        self.order_coefs = order_coefs
+    def __init__(self, embs, device='/cpu:0', 
+                 batch_size=1000, config=None, trace=None):    
+        self.embs = embs
+        self.embs_dim = embs[embs.keys()[0]].shape[0]
         self.graph = None
         self.maxlen = 0
         self.device = device
-        if 'gpu' in device:
-            self.gpu_config = tf.ConfigProto(
-                gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=1.0),
-                device_count = {'gpu': 1}
-            )
+        self.gram_mode = False
+        self.trace = trace
+        self.tf_config = config
+        self.BATCH_SIZE = batch_size
 
-    def _build_graph_batch(self, n):
+    def _build_graph(self, n, order, X, X2=None):
         """
         Builds the graph for TF calculation. This should
         be usually called only once but can be called again
         if we update the maximum string length in our
         dataset.
         """
-        gap_decay = self.gap_decay
-        match_decay = self.match_decay
-        order = self.order
-
+        if X2 == None:
+            X2 = np.array([x.T for x in X])
+        else:
+            X2 = np.array([x.T for x in X2])
         self.graph = tf.Graph()
         with self.graph.as_default(), tf.device(self.device):
+            # Datasets are loaded as constants. Useful for GPUs.
+            # Only feasible for small datasets though.
+            tf_X = tf.constant(X, dtype=tf.float32, name='X')
+            tf_X2 = tf.constant(X2, dtype=tf.float32, name='X2')
 
-            # Strings will be represented as matrices of
-            # embeddings and the similarity is just
-            # the dot product. Hard match is replicated
-            # by using one-hot embeddings.
-            self.mat_list1 = tf.placeholder("float", [None, n, None])
-            self.mat_list2 = tf.placeholder("float", [None, None, n])
-            S = tf.batch_matmul(self.mat_list1, self.mat_list2)
-            batch_size = tf.shape(self.mat_list1)[0]
-
-            # Initilazing auxiliary variables.
-            match_decay_sq = match_decay * match_decay
-
+            # Kernel hyperparameters are also placeholders.
+            # The K function is responsible for tying the
+            # hyper values from class to this calculation
+            # and to update the hyper gradients.
+            self._gap = tf.placeholder("float", [], name='gap_decay')
+            self._match = tf.placeholder("float", [], name='match_decay')
+            self._coefs = tf.placeholder("float", [1, order], name='coefs')
+            self._indices1 = tf.placeholder("int32", [self.BATCH_SIZE], name='indices1')
+            self._indices2 = tf.placeholder("int32", [self.BATCH_SIZE], name='indices2')
+            
             # Triangular matrices over decay powers.
-            npd = np.zeros((n, n))
-            i1, i2 = np.indices(npd.shape)
+            power = np.ones((n, n))
+            tril = np.zeros((n, n))
+            i1, i2 = np.indices(power.shape)
             for k in xrange(n-1):
-                npd[i2-k-1 == i1] = gap_decay ** k
-            D = tf.constant(npd, dtype=tf.float32)
+                power[i2-k-1 == i1] = k
+                tril[i2-k-1 == i1] = 1.0
+            tf_tril = tf.constant(tril, dtype=tf.float32, name='tril')
+            tf_power = tf.constant(power, dtype=tf.float32, name='power')
+            gaps = tf.fill([n, n], self._gap, name='gaps')
+            D = tf.pow(tf.mul(gaps, tf_tril), tf_power, name='D_matrix')
+            dD_dgap = tf.pow((tf_tril * gaps), (tf_power - 1.0)) * tf_tril * tf_power
 
-            # Initialize Kp, one for each n-gram order (including 0)
-            Kp_shape = tf.pack([order+1, batch_size, n, n])
-            initial_Kp = tf.fill(Kp_shape, 1.0)
-            Kp = taops.TensorArray(dtype=initial_Kp.dtype, size=order+1,
-                                   tensor_array_name="Kp")
-            Kp = Kp.unpack(initial_Kp)
+            match_sq = tf.pow(self._match, 2, name='match_sq')
 
-            # Auxiliary Kp for using in While.
-            acc_Kp = taops.TensorArray(dtype=initial_Kp.dtype, size=order+1,
-                                   tensor_array_name="ret_Kp")
+            # Gather matlists and generate similarity matrices
+            matlist1 = tf.gather(tf_X, self._indices1, name='matlist1')
+            matlist2 = tf.gather(tf_X2, self._indices2, name='matlist2')
+            S = tf.batch_matmul(matlist1, matlist2)
+            
+            # Kp calculation
+            Kp = []
+            dKp_dgap = []
+            dKp_dmatch = []
+            Kp.append(tf.ones(shape=(self.BATCH_SIZE, n, n)))
+            dKp_dgap.append(tf.zeros(shape=(self.BATCH_SIZE, n, n)))
+            dKp_dmatch.append(tf.zeros(shape=(self.BATCH_SIZE, n, n)))
 
-            # Main loop, where Kp values are calculated.
-            i = tf.constant(0)
-            a = Kp.read(0)
-            acc_Kp = acc_Kp.write(0, a)
-            #print [batch_size * n, n]
-            def _update_Kp(acc_Kp, a, S, i):
-                aux1 = tf.mul(S, a)
-                #aux2 = tf.batch_matmul(aux1, D) * match_decay_sq
-                #aux3 = tf.transpose(aux2, perm=[0, 2, 1])
-                #aux4 = tf.batch_matmul(aux3, D)
-                #a = tf.transpose(aux4, perm=[0, 2, 1])
-                #shape1 = tf.mul(batch_size, n)
-                aux2 = tf.reshape(aux1, tf.pack([batch_size * n, n]))
-                aux3 = tf.matmul(aux2, D) * match_decay_sq
-                aux4 = tf.reshape(aux3, tf.pack([batch_size, n, n]))
-                aux5 = tf.transpose(aux4, perm=[0, 2, 1])
-                aux6 = tf.reshape(aux5, tf.pack([batch_size * n, n]))
-                aux7 = tf.matmul(aux6, D)
-                aux8 = tf.reshape(aux7, tf.pack([batch_size, n, n]))
-                a = tf.transpose(aux8, perm=[0, 2, 1])
-                i += 1
-                acc_Kp = acc_Kp.write(i, a)
-                return [acc_Kp, a, S, i]
-            cond = lambda _1, _2, _3, i: i < order
-            loop_vars = [acc_Kp, a, S, i]
-            final_Kp, _, _, _ = cfops.While(cond=cond, body=_update_Kp, 
-                                            loop_vars=loop_vars)
-            final_Kp = final_Kp.pack()
+            for i in xrange(order - 1):
+                aux1 = tf.mul(S, Kp[i])
+                aux2 = tf.reshape(aux1, tf.pack([self.BATCH_SIZE * n, n]))
+                aux3 = tf.matmul(aux2, D)
+                aux4 = aux3 * match_sq
+                aux5 = tf.reshape(aux4, tf.pack([self.BATCH_SIZE, n, n]))
+                aux6 = tf.transpose(aux5, perm=[0, 2, 1])
+                aux7 = tf.reshape(aux6, tf.pack([self.BATCH_SIZE * n, n]))
+                aux8 = tf.matmul(aux7, D)
+                aux9 = tf.reshape(aux8, tf.pack([self.BATCH_SIZE, n, n]))
+                aux10 = tf.transpose(aux9, perm=[0, 2, 1])
+                Kp.append(aux10)
+
+                daux1_dgap = tf.mul(S, dKp_dgap[i])
+                daux2_dgap = tf.reshape(daux1_dgap, tf.pack([self.BATCH_SIZE * n, n]))
+                daux3_dgap = tf.matmul(daux2_dgap, D) + tf.matmul(aux2, dD_dgap)
+                daux4_dgap = daux3_dgap * match_sq
+                daux5_dgap = tf.reshape(daux4_dgap, tf.pack([self.BATCH_SIZE, n, n]))
+                daux6_dgap = tf.transpose(daux5_dgap, perm=[0, 2, 1])
+                daux7_dgap = tf.reshape(daux6_dgap, tf.pack([self.BATCH_SIZE * n, n]))
+                daux8_dgap = tf.matmul(daux7_dgap, D) + tf.matmul(aux7, dD_dgap)
+                daux9_dgap = tf.reshape(daux8_dgap, tf.pack([self.BATCH_SIZE, n, n]))
+                daux10_dgap = tf.transpose(daux9_dgap, perm=[0, 2, 1])
+                dKp_dgap.append(daux10_dgap)
+
+                daux1_dmatch = tf.mul(S, dKp_dmatch[i])
+                daux2_dmatch = tf.reshape(daux1_dmatch, tf.pack([self.BATCH_SIZE * n, n]))
+                daux3_dmatch = tf.matmul(daux2_dmatch, D)
+                daux4_dmatch = (daux3_dmatch * match_sq) + (2 * self._match * aux3)
+                daux5_dmatch = tf.reshape(daux4_dmatch, tf.pack([self.BATCH_SIZE, n, n]))
+                daux6_dmatch = tf.transpose(daux5_dmatch, perm=[0, 2, 1])
+                daux7_dmatch = tf.reshape(daux6_dmatch, tf.pack([self.BATCH_SIZE * n, n]))
+                daux8_dmatch = tf.matmul(daux7_dmatch, D)
+                daux9_dmatch = tf.reshape(daux8_dmatch, tf.pack([self.BATCH_SIZE, n, n]))
+                daux10_dmatch = tf.transpose(daux9_dmatch, perm=[0, 2, 1])
+                dKp_dmatch.append(daux10_dmatch)
+
+            final_Kp = tf.pack(Kp)
+            final_dKp_dgap = tf.pack(dKp_dgap)
+            final_dKp_dmatch = tf.pack(dKp_dmatch)
 
             # Final calculation. We gather all Kps and
             # multiply then by their coeficients.
-            mul1 = S * final_Kp[:order, :, :, :]
+            mul1 = tf.mul(S, final_Kp)
             sum1 = tf.reduce_sum(mul1, 2)
-            Ki = tf.reduce_sum(sum1, 2, keep_dims=True) * match_decay_sq
+            sum2 = tf.reduce_sum(sum1, 2, keep_dims=True)
+            Ki = tf.mul(sum2, match_sq)
             Ki = tf.squeeze(Ki, squeeze_dims=[2])
-            coefs = tf.convert_to_tensor([self.order_coefs])
-            self.result = tf.matmul(coefs, Ki)
+            k_result = tf.squeeze(tf.matmul(self._coefs, Ki))
 
-    def _k_tf_batch(self, s1, s_list2):
-        """
-        Calculates k over a string and a list of strings.
-        This is a Tensorflow version.
-        """
-        mat_list1 = []
-        mat_list2 = []
-        for _s in s_list2:
-            mat_list1.append(self._build_input_matrix(s1[0], self.maxlen).T)
-            mat_list2.append(self._build_input_matrix(_s[0], self.maxlen))
-        output = self.sess.run(self.result, feed_dict={self.mat_list1: mat_list1, 
-                                                       self.mat_list2: mat_list2})
-        return output
+            dmul1_dgap = tf.mul(S, final_dKp_dgap)
+            dsum1_dgap = tf.reduce_sum(dmul1_dgap, 2)
+            dsum2_dgap = tf.reduce_sum(dsum1_dgap, 2, keep_dims=True)
+            dKi_dgap = tf.mul(dsum2_dgap, match_sq)
+            dKi_dgap = tf.squeeze(dKi_dgap, squeeze_dims=[2])
+            dk_dgap = tf.squeeze(tf.matmul(self._coefs, dKi_dgap))
+
+            dmul1_dmatch = tf.mul(S, final_dKp_dmatch)
+            dsum1_dmatch = tf.reduce_sum(dmul1_dmatch, 2)
+            dsum2_dmatch = tf.reduce_sum(dsum1_dmatch, 2, keep_dims=True)
+            dKi_dmatch = tf.mul(dsum2_dmatch, match_sq) + (2 * self._match * sum2)
+            dKi_dmatch = tf.squeeze(dKi_dmatch, squeeze_dims=[2])
+            dk_dmatch = tf.squeeze(tf.matmul(self._coefs, dKi_dmatch))
+
+            dk_dcoefs = Ki
+
+            self.result = (k_result, dk_dgap, dk_dmatch, dk_dcoefs)
 
 
     def K(self, X, X2, gram, params):
         """
-        UNFINISHED METHOD
         """
-        for i, x1 in enumerate(X):
-            print i
-            if gram:
-                row = X2[:i+1]
-            else:
-                row = X2
-            row_result = np.zeros((1,0))
-            for j in xrange((i / BATCH_SIZE) + 1):
-                partial_result = self._k_tf_row(x1, row[j*BATCH_SIZE:(j+1)*BATCH_SIZE])
-                row_result = np.concatenate((row_result, partial_result), axis=1)
-            if gram:
-                result[i, :i+1] = row_result
-                if i > 0:
-                    result[:i+1, i] = row_result
-            else:
-                result[i] = row_result   
+        # We need a better way to name this...
+        # params[2] should be always order_coefs
+        order = len(params[2])
+
+        # If we are calculating the gram matrix we 
+        # enter gram mode. In gram mode we skip
+        # graph rebuilding.
+        if gram:
+            if not self.gram_mode:
+                maxlen = max([len(x[0]) for x in X])
+                X = self._code_and_pad(X, maxlen)
+                self.maxlen = maxlen
+                self.gram_mode = True
+                self._build_graph(maxlen, order, X)
+            indices = [[i1, i2] for i1 in range(len(X)) for i2 in range(len(X2)) if i1 >= i2]
+        else: # We rebuild the graph, usually for predictions
+            self.gram_mode = False
+            maxlen = max([len(x[0]) for x in np.concatenate((X, X2))])
+            X = self._code_and_pad(X, maxlen)
+            X2 = self._code_and_pad(X2, maxlen)
+            self.maxlen = maxlen
+            self._build_graph(maxlen, order, X, X2)
+            indices = [[i1, i2] for i1 in range(len(X)) for i2 in range(len(X2))]
+
+        # Initialize return values
+        k_results = [] 
+        gap_grads = []
+        match_grads = []
+        coef_grads = []
+
+        # Add optional tracing for profiling
+        if self.trace is not None:
+            run_options = config_pb2.RunOptions(
+                trace_level=config_pb2.RunOptions.FULL_TRACE)
+            run_metadata = config_pb2.RunMetadata()
+        else:
+            run_options = None
+            run_metadata = None
+
+        # We start a TF session and run it
+        sess = tf.Session(graph=self.graph, config=self.tf_config)
+
+        indices_copy = copy.deepcopy(indices)
+        while indices != []:
+            items = indices[:self.BATCH_SIZE]
+            if len(items) < self.BATCH_SIZE:
+                # padding
+                items += [[0, 0]] * (self.BATCH_SIZE - len(items))
+            items1 = [elem[0] for elem in items]
+            items2 = [elem[1] for elem in items]
+            feed_dict = {self._gap: params[0], 
+                         self._match: params[1],
+                         self._coefs: np.array(params[2])[None, :],
+                         self._indices1: np.array(items1),
+                         self._indices2: np.array(items2)
+                     }
+            before = datetime.datetime.now()
+            result = sess.run(self.result, feed_dict=feed_dict,
+                              options=run_options, 
+                              run_metadata=run_metadata)
+            after = datetime.datetime.now()
+            k, gapg, matchg, coefsg = result
+            if self.trace is not None:
+                tl = timeline.Timeline(run_metadata.step_stats, graph=self.graph)
+                trace = tl.generate_chrome_trace_format()
+                with open(self.trace, 'w') as f:
+                    f.write(trace)
+            for i in xrange(self.BATCH_SIZE):
+                k_results.append(k[i])
+                gap_grads.append(gapg[i])
+                match_grads.append(matchg[i])
+                coef_grads.append(coefsg[:, i])
+            indices = indices[self.BATCH_SIZE:]
+        sess.close()
+        
+        # Reshape the return values since they are vectors:
+        if gram:
+            lenX2 = None
+        else:
+            lenX2 = len(X2)
+        k_results = self._triangulate(k_results, indices_copy, len(X), lenX2)
+        gap_grads = self._triangulate(gap_grads, indices_copy, len(X), lenX2)
+        match_grads = self._triangulate(match_grads, indices_copy, len(X), lenX2)
+        coef_grads = self._triangulate(coef_grads, indices_copy, len(X), lenX2)
+    
+        return k_results, gap_grads, match_grads, coef_grads
+
+    def _code_and_pad(self, X, maxlen):
+        """
+        Transform string-based inputs in embeddings and pad them with zeros.
+        """
+        new_X = []
+        for x in X:
+            new_x = np.zeros((maxlen, self.embs_dim))
+            for i, word in enumerate(x[0]):
+                try:
+                    new_x[i] = self.embs[word]
+                except KeyError:
+                    pass # OOV, stick with zeros
+            new_X.append(new_x)
+        return np.array(new_X)
+
+    def _triangulate(self, vector, indices, lenX, lenX2=None):
+        """
+        Transform the return vectors from the graph into their
+        original matrix form.
+        """
+        vector = np.squeeze(np.array(vector))
+        if lenX2 == None:
+            lenX2 = lenX
+            gram = True
+        else:
+            gram = False
+        if vector[0].shape == ():
+            result = np.zeros((lenX, lenX2))
+        else:
+            result = np.zeros((lenX, lenX2, vector[0].shape[0]))
+        for i, elem in enumerate(indices):
+            result[elem[0], elem[1]] = vector[i]
+            if elem[0] != elem[1] and gram:
+                result[elem[1], elem[0]] = vector[i]
+        return result

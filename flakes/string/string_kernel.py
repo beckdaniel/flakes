@@ -4,8 +4,7 @@ from tensorflow.python.ops import control_flow_ops as cfops
 from tensorflow.python.ops import tensor_array_ops as taops
 from sk_tf import TFStringKernel
 from sk_tf_batch import TFBatchStringKernel
-from sk_tf_gram import TFGramStringKernel
-from sk_tf_gram_batch import TFGramBatchStringKernel
+from sk_tf_batch import TFBatchStringKernel
 from sk_numpy import NumpyStringKernel
 from sk_naive import NaiveStringKernel
 from sk_util import build_one_hot
@@ -43,7 +42,7 @@ class StringKernel(object):
     def __init__(self, gap_decay=1.0, match_decay=1.0,
                  order_coefs=[1.0], mode='tf', 
                  embs=None, alphabet=None, device='/cpu:0',
-                 trace=None):
+                 batch_size=1000, config=None, trace=None):
         if (embs is None) and (alphabet is None):
             raise ValueError("You need to provide either an embedding" + 
                              " dictionary through \"embs\" or a list" +
@@ -57,13 +56,9 @@ class StringKernel(object):
         self.match_decay = match_decay
         self.order_coefs = order_coefs
         if mode == 'tf':
-            self._implementation = TFStringKernel(embs, device)
-        elif mode == 'tf-gram':
-            self._implementation = TFGramStringKernel(embs, device=device, trace=trace)
+            self._implementation = TFStringKernel(embs, device, config)
         elif mode == 'tf-batch':
-            self._implementation = TFBatchStringKernel(embs, device)
-        elif mode == 'tf-gram-batch':
-            self._implementation = TFGramBatchStringKernel(embs, device=device, trace=trace)
+            self._implementation = TFBatchStringKernel(embs, device, batch_size, config)
         elif mode == 'numpy':
             self._implementation = NumpyStringKernel(embs)
         elif mode == 'naive':
@@ -107,6 +102,5 @@ class StringKernel(object):
         self.gap_grads = result[1]
         self.match_grads = result[2]
         self.coef_grads = result[3]
-
         return k_result
 
