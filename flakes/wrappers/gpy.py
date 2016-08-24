@@ -29,11 +29,20 @@ class GPyStringKernel(StringKernel, Kern):
 
     def update_gradients_full(self, dL_dK, X, X2=None):
         if X2 is None: 
-            dL_dK = (dL_dK+dL_dK.T)/2
-        self.gap_decay.gradient = np.sum(self.gap_grads * dL_dK)
-        self.match_decay.gradient = np.sum(self.match_grads * dL_dK)
-        for i in xrange(self.order):
-            self.order_coefs.gradient[i] = np.sum(self.coef_grads[:, :, i] * dL_dK)
+            dL_dK = (dL_dK + dL_dK.T) / 2
+        # Workaround to enable kronecker product gradient
+        # We need to update gradients to reflect a tiled gram matrix
+        if dL_dK.shape[0] != self.gap_decay.shape[0]:
+            n_out = dL_dK.shape[0] / self.gap_grads.shape[0]
+            self.gap_decay.gradient = np.sum(np.tile(self.gap_grads, (n_out, n_out)) * dL_dK)
+            self.match_decay.gradient = np.sum(np.tile(self.match_grads, (n_out, n_out)) * dL_dK)
+            for i in xrange(self.order):
+                self.order_coefs.gradient[i] = np.sum(np.tile(self.coef_grads[:, :, i], (n_out, n_out)) * dL_dK)
+        else:
+            self.gap_decay.gradient = np.sum(self.gap_grads * dL_dK)
+            self.match_decay.gradient = np.sum(self.match_grads * dL_dK)
+            for i in xrange(self.order):
+                self.order_coefs.gradient[i] = np.sum(self.coef_grads[:, :, i] * dL_dK)
 
     def Kdiag(self, X):
         result = np.zeros(shape=(len(X),))
