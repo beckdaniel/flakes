@@ -152,7 +152,7 @@ class TFBatchStringKernel(object):
             self.result = (k_result, dk_dgap, dk_dmatch, dk_dcoefs)
 
 
-    def K(self, X, X2, gram, params):
+    def K(self, X, X2, gram, params, diag=False):
         """
         """
         # We need a better way to name this...
@@ -172,12 +172,19 @@ class TFBatchStringKernel(object):
             indices = [[i1, i2] for i1 in range(len(X)) for i2 in range(len(X2)) if i1 >= i2]
         else: # We rebuild the graph, usually for predictions
             self.gram_mode = False
-            maxlen = max([len(x[0]) for x in np.concatenate((X, X2))])
-            X = self._code_and_pad(X, maxlen)
-            X2 = self._code_and_pad(X2, maxlen)
-            self.maxlen = maxlen
-            self._build_graph(maxlen, order, X, X2)
-            indices = [[i1, i2] for i1 in range(len(X)) for i2 in range(len(X2))]
+            if diag:
+                maxlen = max([len(x[0]) for x in X])
+                X = self._code_and_pad(X, maxlen)
+                self.maxlen = maxlen
+                self._build_graph(maxlen, order, X)
+                indices = [[i1, i1] for i1 in range(len(X))]
+            else:
+                maxlen = max([len(x[0]) for x in np.concatenate((X, X2))])
+                X = self._code_and_pad(X, maxlen)
+                X2 = self._code_and_pad(X2, maxlen)
+                self.maxlen = maxlen
+                self._build_graph(maxlen, order, X, X2)
+                indices = [[i1, i2] for i1 in range(len(X)) for i2 in range(len(X2))]
 
         # Initialize return values
         k_results = [] 
@@ -231,15 +238,20 @@ class TFBatchStringKernel(object):
         sess.close()
         
         # Reshape the return values since they are vectors:
-        if gram:
-            lenX2 = None
+        if not diag:
+            if gram:
+                lenX2 = None
+            else:
+                lenX2 = len(X2)
+            k_results = self._triangulate(k_results, indices_copy, len(X), lenX2)
+            gap_grads = self._triangulate(gap_grads, indices_copy, len(X), lenX2)
+            match_grads = self._triangulate(match_grads, indices_copy, len(X), lenX2)
+            coef_grads = self._triangulate(coef_grads, indices_copy, len(X), lenX2)
         else:
-            lenX2 = len(X2)
-        k_results = self._triangulate(k_results, indices_copy, len(X), lenX2)
-        gap_grads = self._triangulate(gap_grads, indices_copy, len(X), lenX2)
-        match_grads = self._triangulate(match_grads, indices_copy, len(X), lenX2)
-        coef_grads = self._triangulate(coef_grads, indices_copy, len(X), lenX2)
-    
+            k_results = np.array(k_results)
+            gap_grads = np.array(gap_grads)
+            match_grads = np.array(match_grads)
+            coef_grads = np.array(coef_grads)
         return k_results, gap_grads, match_grads, coef_grads
 
     def _code_and_pad(self, X, maxlen):

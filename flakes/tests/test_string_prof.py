@@ -19,11 +19,8 @@ class StringKernelProfiling(unittest.TestCase):
         alphabet = list(set(self.s1 + self.s2))
         self.k_slow = flakes.string.StringKernel(mode='slow', alphabet=alphabet)
         self.k_np = flakes.string.StringKernel(mode='numpy', alphabet=alphabet)
-        self.k_tf = flakes.string.StringKernel(alphabet=alphabet, device=self.DEVICE)
-        self.k_tf_gram = flakes.string.StringKernel(mode='tf-gram', alphabet=alphabet,
-                                                    device=self.DEVICE,
-                                                    trace=self.TRACE_FILE)
-        self.k_tf_gram_batch = flakes.string.StringKernel(mode='tf-gram-batch', alphabet=alphabet,
+        self.k_tf = flakes.string.StringKernel(mode='tf', alphabet=alphabet, device=self.DEVICE)
+        self.k_tf_batch = flakes.string.StringKernel(mode='tf-batch', alphabet=alphabet,
                                                           device=self.DEVICE,
                                                           trace=self.TRACE_FILE)
 
@@ -111,39 +108,20 @@ class StringKernelProfiling(unittest.TestCase):
         print after - before
 
     #@unittest.skip('profiling')
-    def test_prof_gram_1(self):
-        self.k_tf_gram.order_coefs = [0.1, 0.2, 0.4, 0.5, 0.7]#, 1, 1, 1] + 32 * [1.0]
-        self.k_tf_gram.gap_decay = 0.8
-        self.k_tf_gram.match_decay = 0.8
-        #result1 = self.k_tf.k(self.s1, self.s1)
-        #print result1
-
-        #self.k_np.order_coefs = [0.1, 0.2, 0.4, 0.5, 0.7, 1, 1, 1]
-        #self.k_np.decay = 0.8
-        print "START PROF GRAM"
-        X = [[self.s3]] * 50
-        X2 = [[self.s4]] * 50
-        before = datetime.datetime.now()
-        result2 = self.k_tf_gram.K(X)
-        after = datetime.datetime.now()
-        print result2
-        print after - before
-
-    @unittest.skip('profiling')
     def test_prof_gram_batch_1(self):
-        self.k_tf_gram_batch.order_coefs = [0.1, 0.2, 0.4, 0.5, 0.7]#, 1, 1, 1] + 32 * [1.0]
-        self.k_tf_gram_batch.gap_decay = 0.8
-        self.k_tf_gram_batch.match_decay = 0.8
+        self.k_tf_batch.order_coefs = [0.1, 0.2, 0.4, 0.5, 0.7, 1, 1, 1] + 32 * [1.0]
+        self.k_tf_batch.gap_decay = 0.8
+        self.k_tf_batch.match_decay = 0.8
         #result1 = self.k_tf.k(self.s1, self.s1)
         #print result1
 
         #self.k_np.order_coefs = [0.1, 0.2, 0.4, 0.5, 0.7, 1, 1, 1]
         #self.k_np.decay = 0.8
         print "START PROF GRAM BATCH"
-        X = [[self.s3]] * 5
-        X2 = [[self.s4]] * 5
+        X = [[self.s3]] * 100
+        X2 = [[self.s4]] * 100
         before = datetime.datetime.now()
-        result2 = self.k_tf_gram_batch.K(X, X2)
+        result2 = self.k_tf_batch.K(X, X2)
         after = datetime.datetime.now()
         print result2
         print after - before

@@ -74,7 +74,7 @@ class StringKernel(object):
     def _get_params(self):
         return [self.gap_decay, self.match_decay, self.order_coefs]
 
-    def K(self, X, X2=None):
+    def K(self, X, X2=None, diag=False):
         """
         Calculate the Gram matrix over two lists of strings. The
         underlying method used for kernel calculation depends
@@ -97,7 +97,7 @@ class StringKernel(object):
             X2 = [[X2]]
 
         params = self._get_params()
-        result = self._implementation.K(X, X2, gram, params)
+        result = self._implementation.K(X, X2, gram, params, diag=diag)
         k_result = result[0]
         self.gap_grads = result[1]
         self.match_grads = result[2]

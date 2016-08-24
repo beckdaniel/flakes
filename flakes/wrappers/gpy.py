@@ -45,10 +45,8 @@ class GPyStringKernel(StringKernel, Kern):
                 self.order_coefs.gradient[i] = np.sum(self.coef_grads[:, :, i] * dL_dK)
 
     def Kdiag(self, X):
-        result = np.zeros(shape=(len(X),))
-        for i, x1 in enumerate(X):
-            result[i] = self.K(x1[0], x1[0])[0][0]
-        return result
+        result = self.K(X, X, diag=True)
+        return result[:len(X)]
 
     def _get_params(self):
         """
