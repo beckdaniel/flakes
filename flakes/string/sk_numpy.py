@@ -51,7 +51,7 @@ class NumpyStringKernel(object):
         Ki = np.sum(np.sum(S * Kp[:-1], axis=1), axis=1) * match_sq
         return Ki.dot(coefs)
 
-    def K(self, X, X2, gram, params):
+    def K(self, X, X2, gram, params, diag=False):
         """
         """
         k_result = np.zeros(shape=(len(X), len(X2)))

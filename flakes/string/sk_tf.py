@@ -111,7 +111,7 @@ class TFStringKernel(object):
             all_stuff = [result] + gap_grads + match_grads + coef_grads
             self.result = all_stuff
 
-    def K(self, X, X2, gram, params):
+    def K(self, X, X2, gram, params, diag=False):
         """
         """
         # We need a better way to name this...

@@ -60,7 +60,7 @@ class NaiveStringKernel(object):
             t[i, self.alphabet[ch]] = 1.0
         return t.T
 
-    def K(self, X, X2, gram, params):
+    def K(self, X, X2, gram, params, diag=False):
         """
         """
         k_result = np.zeros(shape=(len(X), len(X2)))
