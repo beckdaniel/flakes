@@ -46,8 +46,6 @@ class TFBatchLazyStringKernel(object):
             X2 = X.copy()
         self.graph = tf.Graph()
         with self.graph.as_default(), tf.device(self.device):
-            tf_pi = tf.constant(np.pi, dtype=tf.float64)
-
             # Datasets are loaded as constants. Useful for GPUs.
             # Only feasible for small datasets though.
             tf_X = tf.constant(X, dtype=tf.int32, name='X')
@@ -135,16 +133,14 @@ class TFBatchLazyStringKernel(object):
         matlist2 = tf.batch_matrix_transpose(tf.gather(tf_embs, inputlist2, name='matlist2'))
         S_dot = tf.batch_matmul(matlist1, matlist2)
         if self.sim == 'dot':
-            # Calculation ends here.
+            # Calculation ends here for dot product.
             return S_dot
 
         # This calculation corresponds to an arc-cosine with 
         # degree 0. It can be interpreted as cosine
         # similarity but projected into a [0,1] interval.
         # TODO: arc-cosine with degree 1.
-
-        #tf_norms = tf.sqrt(tf.reduce_sum(tf.pow(tf_embs, 2), 1, keep_dims=True))
-        #tf_norms = tf.scatter_update(tf_norms, [0], [1.0])
+        tf_pi = tf.constant(np.pi, dtype=tf.float64)
         tf_norms = tf.constant(self.norms, dtype=tf.float64, name='norms')
         normlist1 = tf.gather(tf_norms, inputlist1, name='normlist1')
         normlist2 = tf.batch_matrix_transpose(tf.gather(tf_norms, inputlist2, name='normlist2'))
