@@ -40,10 +40,10 @@ class StringKernel(object):
     """
 
     def __init__(self, gap_decay=1.0, match_decay=1.0,
-                 order_coefs=[1.0], variance=1.0, mode='tf', 
+                 order_coefs=[1.0], variance=1.0, mode='tf-batch-lazy',
+                 sim='dot', wrapper='none',
                  embs=None, index=None, alphabet=None, device='/cpu:0',
-                 batch_size=1000, config=None, trace=None,
-                 normalise=False):
+                 batch_size=1000, config=None, trace=None):
         if (embs is None) and (alphabet is None):
             raise ValueError("You need to provide either an embedding" + 
                              " dictionary through \"embs\" or a list" +
@@ -57,6 +57,7 @@ class StringKernel(object):
         self.match_decay = match_decay
         self.variance = variance
         self.order_coefs = order_coefs
+        self.wrapper = wrapper
         if mode == 'tf':
             self._implementation = TFStringKernel(embs, device, config)
         elif mode == 'tf-batch':
@@ -64,7 +65,9 @@ class StringKernel(object):
         elif mode == 'tf-batch-lazy':
             if index == None:
                 embs, index = build_one_hot(alphabet, matrix=True)
-            self._implementation = TFBatchLazyStringKernel(embs, index, device, batch_size, normalise, config)
+            self._implementation = TFBatchLazyStringKernel(embs, sim, wrapper,
+                                                           index, device, 
+                                                           batch_size, config)
         elif mode == 'numpy':
             self._implementation = NumpyStringKernel(embs)
         elif mode == 'naive':
@@ -110,7 +113,7 @@ class StringKernel(object):
         self.gap_grads = result[1]
         self.match_grads = result[2]
         self.coef_grads = result[3]
-        self.var_grads = result[4]
-        #print k_result
+        if self.wrapper != 'none':
+            self.var_grads = result[4]
         return k_result
 
