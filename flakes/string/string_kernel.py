@@ -40,9 +40,10 @@ class StringKernel(object):
     """
 
     def __init__(self, gap_decay=1.0, match_decay=1.0,
-                 order_coefs=[1.0], mode='tf', 
-                 embs=None, alphabet=None, device='/cpu:0',
-                 batch_size=1000, config=None, trace=None):
+                 order_coefs=[1.0], variance=1.0, mode='tf', 
+                 embs=None, index=None, alphabet=None, device='/cpu:0',
+                 batch_size=1000, config=None, trace=None,
+                 normalise=False):
         if (embs is None) and (alphabet is None):
             raise ValueError("You need to provide either an embedding" + 
                              " dictionary through \"embs\" or a list" +
@@ -54,13 +55,16 @@ class StringKernel(object):
             embs = build_one_hot(alphabet)
         self.gap_decay = gap_decay
         self.match_decay = match_decay
+        self.variance = variance
         self.order_coefs = order_coefs
         if mode == 'tf':
             self._implementation = TFStringKernel(embs, device, config)
         elif mode == 'tf-batch':
             self._implementation = TFBatchStringKernel(embs, device, batch_size, config)
         elif mode == 'tf-batch-lazy':
-            self._implementation = TFBatchLazyStringKernel(embs, device, batch_size, config)
+            if index == None:
+                embs, index = build_one_hot(alphabet, matrix=True)
+            self._implementation = TFBatchLazyStringKernel(embs, index, device, batch_size, normalise, config)
         elif mode == 'numpy':
             self._implementation = NumpyStringKernel(embs)
         elif mode == 'naive':
@@ -74,7 +78,8 @@ class StringKernel(object):
         return len(self.order_coefs)
 
     def _get_params(self):
-        return [self.gap_decay, self.match_decay, self.order_coefs]
+        return [self.gap_decay, self.match_decay, 
+                self.order_coefs, self.variance]
 
     def K(self, X, X2=None, diag=False):
         """
@@ -94,15 +99,18 @@ class StringKernel(object):
         # we need to explicitly convert to lists before any
         # processing
         if not (isinstance(X, list) or isinstance(X, np.ndarray)):
-            X = [[X]]
+            X = np.array([[X]])
         if not (isinstance(X2, list) or isinstance(X2, np.ndarray)):
-            X2 = [[X2]]
+            X2 = np.array([[X2]])
 
         params = self._get_params()
         result = self._implementation.K(X, X2, gram, params, diag=diag)
         k_result = result[0]
+
         self.gap_grads = result[1]
         self.match_grads = result[2]
         self.coef_grads = result[3]
+        self.var_grads = result[4]
+        #print k_result
         return k_result
 

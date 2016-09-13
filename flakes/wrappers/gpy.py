@@ -9,40 +9,50 @@ class GPyStringKernel(StringKernel, Kern):
     Flakes string kernel wrapped in a GPy API.
     """
     def __init__(self, gap_decay=1.0, match_decay=1.0,
-                 order_coefs=[1.0], mode='tf-batch', 
+                 order_coefs=[1.0], variance=1.0, 
+                 mode='tf-batch', 
                  active_dims=None, name='string',
                  embs=None, alphabet=None,
                  device='/cpu:0', batch_size=1000,
-                 config=None):
+                 config=None, normalise=False,
+                 index=None):
         Kern.__init__(self, 1, active_dims, name)
         StringKernel.__init__(self, gap_decay, match_decay,
-                              order_coefs, mode, embs=embs,
+                              order_coefs, variance, mode, embs=embs,
                               alphabet=alphabet, device=device,
-                              batch_size=batch_size, config=config)
+                              batch_size=batch_size, config=config,
+                              normalise=normalise, index=index)
         self.gap_decay = Param('gap_decay', gap_decay, Logexp())
         self.match_decay = Param('match_decay', match_decay, Logexp())
         self.order_coefs = Param('coefs', order_coefs, Logexp())
+        self.variance = Param('variance', variance, Logexp())
         self.graph = None
         self.link_parameter(self.gap_decay)
         self.link_parameter(self.match_decay)
         self.link_parameter(self.order_coefs)
+        self.link_parameter(self.variance)
 
     def update_gradients_full(self, dL_dK, X, X2=None):
         if X2 is None: 
             dL_dK = (dL_dK + dL_dK.T) / 2
         # Workaround to enable kronecker product gradient
         # We need to update gradients to reflect a tiled gram matrix
-        if dL_dK.shape[0] != self.gap_decay.shape[0]:
+        if dL_dK.shape[0] != self.gap_grads.shape[0]:
+            #print dL_dK
+            #print self.gap_decay
             n_out = dL_dK.shape[0] / self.gap_grads.shape[0]
             self.gap_decay.gradient = np.sum(np.tile(self.gap_grads, (n_out, n_out)) * dL_dK)
             self.match_decay.gradient = np.sum(np.tile(self.match_grads, (n_out, n_out)) * dL_dK)
+            #print self.order_coefs.gradient
             for i in xrange(self.order):
                 self.order_coefs.gradient[i] = np.sum(np.tile(self.coef_grads[:, :, i], (n_out, n_out)) * dL_dK)
+            self.variance.gradient = np.sum(np.tile(self.var_grads, (n_out, n_out)) * dL_dK)
         else:
             self.gap_decay.gradient = np.sum(self.gap_grads * dL_dK)
             self.match_decay.gradient = np.sum(self.match_grads * dL_dK)
             for i in xrange(self.order):
                 self.order_coefs.gradient[i] = np.sum(self.coef_grads[:, :, i] * dL_dK)
+            self.variance.gradient = np.sum(self.var_grads * dL_dK)
 
     def Kdiag(self, X):
         result = self.K(X, X, diag=True)
@@ -52,5 +62,6 @@ class GPyStringKernel(StringKernel, Kern):
         """
         Overriding this because of the way GPy handles parameters.
         """
-        return [self.gap_decay[0], self.match_decay[0], self.order_coefs]
+        return [self.gap_decay[0], self.match_decay[0],
+                self.order_coefs, self.variance[0]]
         
