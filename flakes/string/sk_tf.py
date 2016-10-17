@@ -12,7 +12,7 @@ class TFStringKernel(object):
     """
     def __init__(self, embs, device='/cpu:0', config=None):    
         self.embs = embs
-        self.embs_dim = embs[embs.keys()[0]].shape[0]
+        self.embs_dim = embs.shape[1]
         self.graph = None
         self.maxlen = 0
         self.device = device
@@ -95,8 +95,8 @@ class TFStringKernel(object):
                 return [acc_Kp, a, S, i]
             cond = lambda _1, _2, _3, i: i < order
             loop_vars = [acc_Kp, a, S, i]
-            final_Kp, _, _, _ = cfops.While(cond=cond, body=_update_Kp, 
-                                            loop_vars=loop_vars)
+            final_Kp, _, _, _ = tf.while_loop(cond=cond, body=_update_Kp, 
+                                              loop_vars=loop_vars)
             final_Kp = final_Kp.pack()
 
             # Final calculation. We gather all Kps and
@@ -120,7 +120,7 @@ class TFStringKernel(object):
 
         # We have to build a new graph if 1) there is no graph or
         # 2) current graph maxlen is not large enough for these inputs
-        maxlen = max([len(x[0]) for x in np.concatenate((X, X2))])
+        maxlen = max([len(x[0]) for x in list(X) + list(X2)])
         if self.graph is None:
             sys.stderr.write("No graph found. Building one.\n")
             self._build_graph(maxlen, order)

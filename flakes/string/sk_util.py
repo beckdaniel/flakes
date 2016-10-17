@@ -21,6 +21,15 @@ def build_one_hot(alphabet, matrix=False):
         return embs
 
 
+def encode_string(s, index):
+    """
+    Transform a string in a list of integers.
+    The ints correspond to indices in an
+    embeddings matrix.
+    """
+    return [index[symbol] for symbol in s]
+
+
 def build_input_matrix(string, embs, length=None, dim=None):
     """
     Transform an input (string or list) into a

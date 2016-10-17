@@ -18,7 +18,7 @@ class TFBatchStringKernel(object):
     def __init__(self, embs, device='/cpu:0', 
                  batch_size=1000, config=None, trace=None):    
         self.embs = embs
-        self.embs_dim = embs[embs.keys()[0]].shape[0]
+        self.embs_dim = embs.shape[1]
         self.graph = None
         self.maxlen = 0
         self.device = device

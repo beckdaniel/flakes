@@ -8,6 +8,7 @@ from sk_tf_batch_lazy import TFBatchLazyStringKernel
 from sk_numpy import NumpyStringKernel
 from sk_naive import NaiveStringKernel
 from sk_util import build_one_hot
+from sk_util import encode_string
 import line_profiler
 
 
@@ -52,7 +53,7 @@ class StringKernel(object):
         # one-hot encodings as the embeddings, i.e.,
         # we assume hard match between symbols.
         if embs is None:
-            embs = build_one_hot(alphabet)
+            embs, self.index = build_one_hot(alphabet, matrix=True)
         self.gap_decay = gap_decay
         self.match_decay = match_decay
         self.variance = variance
@@ -63,14 +64,13 @@ class StringKernel(object):
         elif mode == 'tf-batch':
             self._implementation = TFBatchStringKernel(embs, device, batch_size, config)
         elif mode == 'tf-batch-lazy':
-            if index == None:
-                embs, index = build_one_hot(alphabet, matrix=True)
             self._implementation = TFBatchLazyStringKernel(embs, sim, wrapper,
                                                            index, device, 
                                                            batch_size, config)
         elif mode == 'numpy':
-            self._implementation = NumpyStringKernel(embs)
+            self._implementation = NumpyStringKernel(embs=embs, sim=sim)
         elif mode == 'naive':
+            embs = build_one_hot(alphabet, matrix=False)
             self._implementation = NaiveStringKernel(embs)
 
     @property
@@ -105,6 +105,11 @@ class StringKernel(object):
             X = np.array([[X]])
         if not (isinstance(X2, list) or isinstance(X2, np.ndarray)):
             X2 = np.array([[X2]])
+
+        # Now we turn our inputs into lists of integers using the
+        # index
+        X = [[encode_string(x[0], self.index)] for x in X]
+        X2 = [[encode_string(x2[0], self.index)] for x2 in X2]
 
         params = self._get_params()
         result = self._implementation.K(X, X2, gram, params, diag=diag)

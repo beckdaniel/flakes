@@ -9,10 +9,12 @@ class NaiveStringKernel(object):
     in Cancedda et. al (2003). It is kept for
     documentary and testing purposes, do not use
     this for general applications.
+    This version also do not implement gradients.
     """
     def __init__(self, embs):
         self.embs = embs
         self.embs_dim = embs[embs.keys()[0]].shape[0]
+        print embs
 
     def _k(self, s1, s2, params):
         n = len(s1)

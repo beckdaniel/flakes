@@ -9,11 +9,19 @@ class NumpyStringKernel(object):
     slower than TensorFlow versions. Also
     kept for documentary and testing purposes.
     """
-    def __init__(self, embs):
+    def __init__(self, embs, sim='arccosine'):
         self.embs = embs
-        self.embs_dim = embs[embs.keys()[0]].shape[0]
+        self.embs_dim = embs.shape[1]
+        if sim == 'arccosine':
+            self.sim = self._arccosine
+            self.norms = np.sqrt(tnp.sum(pow(embs, 2), 1, keepdims=True))
+        elif sim == 'dot':
+            self.sim = self._dot
 
     def _k(self, s1, s2, params):
+        """
+        The actual string kernel calculation.
+        """
         n = len(s1)
         m = len(s2)
         gap = params[0]
@@ -21,13 +29,17 @@ class NumpyStringKernel(object):
         coefs = params[2]
         order = len(coefs)
 
-        if not isinstance(s1, np.ndarray):
-            s1 = build_input_matrix(s1, self.embs, dim=self.embs_dim)
-        if not isinstance(s2, np.ndarray):
-            s2 = build_input_matrix(s2, self.embs, dim=self.embs_dim)
+        #if not isinstance(s1, np.ndarray):
+        #    s1 = build_input_matrix(s1, self.embs, dim=self.embs_dim)
+        #if not isinstance(s2, np.ndarray):
+        #    s2 = build_input_matrix(s2, self.embs, dim=self.embs_dim)
+
+        # Transform inputs into embedding matrices
+        embs1 = self.embs[s1]
+        embs2 = self.embs[s2]
 
         # Store sim(j, k) values
-        S = s1.dot(s2.T)
+        S = self.sim(embs1, embs2)
         
         # Triangular matrix over decay powers
         max_len = max(n, m)
@@ -51,8 +63,33 @@ class NumpyStringKernel(object):
         Ki = np.sum(np.sum(S * Kp[:-1], axis=1), axis=1) * match_sq
         return Ki.dot(coefs)
 
+    def _dot(self, embs1, embs2):
+        """
+        Simple dot product between two vectors of embeddings.
+        This returns a matrix of positive real numbers.
+        """
+        return embs1.dot(embs2.T)
+
+    def _arccosine(self, embs1, embs2):
+        """
+        Uses an arccosine kernel of degree 0 to calculate
+        the similarity matrix between two vectors of embeddings. 
+        This is just cosine similarity projected into the [0,1] interval.
+        """
+        normembs1 = self.norms[embs1]
+        normembs2 = self.norms[embs2]
+        norms = np.dot(normembs1, normembs2.T)
+        dot = embs1.dot(embs2.T)
+        # We clip values due to numerical errors
+        # which put some values outside the arccosine range.
+        cosine = np.clip(dot / norms, -1, 1)
+        angle = np.arccos(cosine)
+        return 1 - (angle / np.pi)
+
     def K(self, X, X2, gram, params, diag=False):
         """
+        Calculates and returns the Gram matrix between two lists
+        of strings. These should be encoded as lists of integers.
         """
         k_result = np.zeros(shape=(len(X), len(X2)))
         for i, x1 in enumerate(X):

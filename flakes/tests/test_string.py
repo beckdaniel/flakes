@@ -14,11 +14,11 @@ class StringKernelTests(unittest.TestCase):
         self.s4 = 'cgagatgccaatagagagagcgctgta'
         alphabet = 'acgt'
         self.k_slow = flakes.string.StringKernel(mode='naive', alphabet=alphabet)
-        self.k_np = flakes.string.StringKernel(mode='numpy', alphabet=alphabet)
+        self.k_np = flakes.string.StringKernel(mode='numpy', alphabet=alphabet, sim='dot')
         self.k_tf = flakes.string.StringKernel(mode='tf',alphabet=alphabet)
         self.k_tf_batch = flakes.string.StringKernel(mode='tf-batch', alphabet=alphabet)  
-        self.k_tf_lazy = flakes.string.StringKernel(mode='tf-batch-lazy', alphabet=alphabet, normalise=False)
-        self.k_tf_lazy_norm = flakes.string.StringKernel(mode='tf-batch-lazy', alphabet=alphabet, normalise=True)
+        self.k_tf_lazy = flakes.string.StringKernel(mode='tf-batch-lazy', alphabet=alphabet, wrapper='none')
+        self.k_tf_lazy_norm = flakes.string.StringKernel(mode='tf-batch-lazy', alphabet=alphabet, wrapper='norm')
         
     def test_sk_slow_1(self):
         self.k_slow.order_coefs = [1.] * 5
