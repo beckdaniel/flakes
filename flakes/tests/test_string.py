@@ -160,7 +160,7 @@ class StringKernelTests(unittest.TestCase):
         result = self.k_tf.K(X)
         true_grads = self.k_tf.gap_grads
 
-        E = 1e-7
+        E = 1e-4
         self.k_tf.gap_decay = 0.8 + E
         g_result1 = self.k_tf.K(X)
         self.k_tf.gap_decay = 0.8 - E
@@ -197,16 +197,6 @@ class StringKernelTests(unittest.TestCase):
         self.k_tf_batch.match_decay = 0.8
         result2 = self.k_tf_batch.K(X)
         np.set_printoptions(suppress=True)
-        #print "NORMAL"
-        #print result1
-        #print self.k_tf.gap_grads
-        #print self.k_tf.match_grads
-        #print self.k_tf.coef_grads
-        #print "GRAM BATCH"
-        #print result2
-        #print self.k_tf_batch.gap_grads
-        #print self.k_tf_batch.match_grads
-        #print self.k_tf_batch.coef_grads
 
         self.assertAlmostEqual(np.sum(result1), np.sum(result2), places=2)
         self.assertAlmostEqual(np.sum(self.k_tf.gap_grads), np.sum(self.k_tf_batch.gap_grads), places=2)
@@ -228,9 +218,6 @@ class StringKernelTests(unittest.TestCase):
         result2 = self.k_tf_batch.K(X)
         np.set_printoptions(suppress=True)
 
-        print result1
-        print result2
-
         self.assertAlmostEqual(np.sum(result1), np.sum(result2), places=2)
         self.assertAlmostEqual(np.sum(self.k_tf_lazy.gap_grads), np.sum(self.k_tf_batch.gap_grads), places=2)
         self.assertAlmostEqual(np.sum(self.k_tf_lazy.match_grads)/1000, np.sum(self.k_tf_batch.match_grads)/1000, places=2)
@@ -241,11 +228,8 @@ class StringKernelTests(unittest.TestCase):
         self.k_tf_lazy_norm.order_coefs = [1.0] * 2
         self.k_tf_lazy_norm.gap_decay = 1.0
         self.k_tf_lazy_norm.match_decay = 0.8
-        #result = self.k_tf_lazy_norm.K(np.array([[self.s1], [self.s2]]), 
-        #                               np.array([[self.s2], [self.s1]]))
         X = [[self.s1], [self.s2], [self.s3], [self.s4]]
         result = self.k_tf_lazy_norm.K(X) 
-        #print result
         true_grads = self.k_tf_lazy_norm.gap_grads
 
         E = 1e-2
@@ -255,11 +239,7 @@ class StringKernelTests(unittest.TestCase):
         g_result2 = self.k_tf_lazy_norm.K(X)
         g_result = (g_result1 - g_result2) / (2 * E)
 
-        print "TEST RESULT"
-        print true_grads
-        print g_result
-
-        self.assertAlmostEqual(true_grads, g_result, places=2)
+        self.assertAlmostEqual(np.sum(true_grads), np.sum(g_result), places=2)
 
 
 

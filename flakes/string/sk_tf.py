@@ -122,7 +122,7 @@ class TFStringKernel(object):
         # 2) current graph maxlen is not large enough for these inputs
         maxlen = max([len(x[0]) for x in list(X) + list(X2)])
         if self.graph is None:
-            sys.stderr.write("No graph found. Building one.\n")
+            #sys.stderr.write("No graph found. Building one.\n")
             self._build_graph(maxlen, order)
             self.maxlen = maxlen
         elif maxlen > self.maxlen:
