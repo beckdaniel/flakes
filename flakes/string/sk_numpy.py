@@ -51,15 +51,37 @@ class NumpyStringKernel(object):
         S = self.sim(embs1, embs2)
 
         # Initializing auxiliary variables
-        Kp = np.ones(shape=(order + 1, n, m))
+        Kp = np.ones(shape=(order, n, m))
+        dKp_dgap = np.zeros(shape=(order, n, m))
+        dKp_dmatch = np.zeros(shape=(order, n, m))
         match_sq = match * match
 
-        for i in xrange(order):
-            Kpp = match_sq * (S * Kp[i]).dot(D[0:m, 0:m])
+        for i in xrange(order - 1):
+            aux1 = S * Kp[i]
+            aux2 = aux1.dot(D[0:m, 0:m])
+            Kpp = match_sq * aux2
             Kp[i + 1] = Kpp.T.dot(D[0:n, 0:n]).T
 
+            daux1_dgap = S * dKp_dgap[i]
+            daux2_dgap = daux1_dgap.dot(D[0:m, 0:m]) + aux1.dot(dD_dgap[0:m, 0:m])
+            dKpp_dgap = match_sq * daux2_dgap
+            dKp_dgap[i] = dKpp_dgap.T.dot(D[0:n, 0:n]).T + dKpp_dgap.T.dot(dD_dgap[0:n, 0:n]).T
+
+            daux1_dmatch = S * dKp_dmatch[i]
+            daux2_dmatch = daux1_dmatch.dot(D[0:m, 0:m])
+            dKpp_dmatch = (match_sq * daux2_dmatch) + (2 * match * aux2)
+            dKp_dmatch[i] = dKpp_dmatch.T.dot(D[0:n, 0:n]).T
+
+            #Kpp = match_sq * (S * Kp[i]).dot(D[0:m, 0:m])
+            #Kp[i + 1] = Kpp.T.dot(D[0:n, 0:n]).T
+            
+
         # Final calculation
-        Ki = np.sum(np.sum(S * Kp[:-1], axis=1), axis=1) * match_sq
+        aux1 = S * Kp
+        aux2 = np.sum(aux1, axis=1)
+        aux3 = np.sum(aux2, axis=1)
+        Ki = match_sq * aux3
+        #Ki = np.sum(np.sum(S * Kp[:-1], axis=1), axis=1) * match_sq
         return Ki.dot(coefs)
 
     def _dot(self, embs1, embs2):
