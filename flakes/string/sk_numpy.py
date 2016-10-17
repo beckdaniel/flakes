@@ -20,7 +20,9 @@ class NumpyStringKernel(object):
 
     def _k(self, s1, s2, params):
         """
-        The actual string kernel calculation.
+        The actual string kernel calculation. It also
+        calculates gradients with respect to the
+        multiple hyperparameters.
         """
         n = len(s1)
         m = len(s2)
@@ -29,36 +31,33 @@ class NumpyStringKernel(object):
         coefs = params[2]
         order = len(coefs)
 
-        #if not isinstance(s1, np.ndarray):
-        #    s1 = build_input_matrix(s1, self.embs, dim=self.embs_dim)
-        #if not isinstance(s2, np.ndarray):
-        #    s2 = build_input_matrix(s2, self.embs, dim=self.embs_dim)
-
         # Transform inputs into embedding matrices
         embs1 = self.embs[s1]
         embs2 = self.embs[s2]
+        
+        # Triangular matrix over decay powers
+        maxlen = max(n, m)
+        power = np.ones((maxlen, maxlen))
+        tril = np.zeros((maxlen, maxlen))
+        i1, i2 = np.indices(power.shape)
+        for k in xrange(maxlen - 1):
+            power[i2-k-1 == i1] = k
+            tril[i2-k-1 == i1] = 1.0
+        gaps = np.ones((maxlen, maxlen)) * gap
+        D = (gaps * tril) ** power
+        dD_dgap = ((gaps * tril) ** (power - 1.0)) * tril * power
 
         # Store sim(j, k) values
         S = self.sim(embs1, embs2)
-        
-        # Triangular matrix over decay powers
-        max_len = max(n, m)
-        D = np.zeros((max_len, max_len))
-        d1, d2 = np.indices(D.shape)
-        for k in xrange(max_len):
-            D[d2-k == d1] = gap ** k
 
         # Initializing auxiliary variables
-        Kp = np.zeros(shape=(order + 1, n, m))
-        Kp[0, :, :] = 1.0
-        Kpp = np.zeros(shape=(order, n, m))
+        Kp = np.ones(shape=(order + 1, n, m))
         match_sq = match * match
 
         for i in xrange(order):
-            Kpp[i, :-1, 1:] = (match_sq *
-                               (S[:-1, :-1] * Kp[i, :-1, :-1]).dot(D[1:m, 1:m]))
-            Kp[i + 1, 1:] = Kpp[i, :-1].T.dot(D[1:n, 1:n]).T
-        
+            Kpp = match_sq * (S * Kp[i]).dot(D[0:m, 0:m])
+            Kp[i + 1] = Kpp.T.dot(D[0:n, 0:n]).T
+
         # Final calculation
         Ki = np.sum(np.sum(S * Kp[:-1], axis=1), axis=1) * match_sq
         return Ki.dot(coefs)
