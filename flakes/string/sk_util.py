@@ -1,24 +1,17 @@
 import numpy as np
 
 
-def build_one_hot(alphabet, matrix=False):
+def build_one_hot(alphabet):
     """
     Build one-hot encodings for a given alphabet.
     """
     dim = len(alphabet)
-    if matrix:
-        embs = np.zeros((dim+1, dim))
-        index = {}
-        for i, symbol in enumerate(alphabet):
-            embs[i+1, i] = 1.0
-            index[symbol] = i+1
-        return embs, index
-    else:
-        embs = {}
-        for i, symbol in enumerate(alphabet):
-            embs[symbol] = np.zeros(dim)
-            embs[symbol][i] = 1.0
-        return embs
+    embs = np.zeros((dim+1, dim))
+    index = {}
+    for i, symbol in enumerate(alphabet):
+        embs[i+1, i] = 1.0
+        index[symbol] = i+1
+    return embs, index
 
 
 def encode_string(s, index):

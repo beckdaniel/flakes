@@ -53,7 +53,7 @@ class StringKernel(object):
         # one-hot encodings as the embeddings, i.e.,
         # we assume hard match between symbols.
         if embs is None:
-            embs, self.index = build_one_hot(alphabet, matrix=True)
+            embs, self.index = build_one_hot(alphabet)
         self.gap_decay = gap_decay
         self.match_decay = match_decay
         self.variance = variance
@@ -70,8 +70,7 @@ class StringKernel(object):
         elif mode == 'numpy':
             self._implementation = NumpyStringKernel(embs=embs, sim=sim)
         elif mode == 'naive':
-            embs = build_one_hot(alphabet, matrix=False)
-            self._implementation = NaiveStringKernel(embs)
+            self._implementation = NaiveStringKernel(embs=embs)
 
     @property
     def order(self):

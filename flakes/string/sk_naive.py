@@ -13,8 +13,7 @@ class NaiveStringKernel(object):
     """
     def __init__(self, embs):
         self.embs = embs
-        self.embs_dim = embs[embs.keys()[0]].shape[0]
-        print embs
+        self.embs_dim = embs.shape[1]
 
     def _k(self, s1, s2, params):
         n = len(s1)
@@ -24,10 +23,14 @@ class NaiveStringKernel(object):
         coefs = params[2]
         order = len(coefs)
 
-        if not isinstance(s1, np.ndarray):
-            s1 = build_input_matrix(s1, self.embs, dim=self.embs_dim)
-        if not isinstance(s2, np.ndarray):
-            s2 = build_input_matrix(s2, self.embs, dim=self.embs_dim)
+        #if not isinstance(s1, np.ndarray):
+        #    s1 = build_input_matrix(s1, self.embs, dim=self.embs_dim)
+        #if not isinstance(s2, np.ndarray):
+        #    s2 = build_input_matrix(s2, self.embs, dim=self.embs_dim)
+
+        # Transform inputs into embedding matrices
+        embs1 = self.embs[s1]
+        embs2 = self.embs[s2]
 
         Kp = np.zeros(shape=(order + 1, n, m))
         for j in xrange(n):
@@ -38,7 +41,7 @@ class NaiveStringKernel(object):
                 Kpp = 0.0
                 for k in xrange(m - 1):
                     Kpp = (gap * Kpp + 
-                           match * match * (s1[j].T.dot(s2[k])) * Kp[i][j][k])
+                           match * match * (embs1[j].T.dot(embs2[k])) * Kp[i][j][k])
                     Kp[i + 1][j + 1][k + 1] = gap * Kp[i + 1][j][k + 1] + Kpp
         result = 0.0
         for i in xrange(order):
@@ -46,7 +49,7 @@ class NaiveStringKernel(object):
             for j in xrange(n):
                 for k in xrange(m):
                     result_i += (match * match * 
-                                 (s1[j].T.dot(s2[k])) * Kp[i][j][k])
+                                 (embs1[j].T.dot(embs2[k])) * Kp[i][j][k])
             result += coefs[i] * result_i
         return result
 
