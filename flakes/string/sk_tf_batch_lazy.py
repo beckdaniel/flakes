@@ -130,7 +130,7 @@ class TFBatchLazyStringKernel(object):
         inputlist1 = tf.gather(tf_X, self._indices1, name='inputlist1')
         inputlist2 = tf.gather(tf_X2, self._indices2, name='inputlist2')
         matlist1 = tf.gather(tf_embs, inputlist1, name='matlist1')
-        matlist2 = tf.batch_matrix_transpose(tf.gather(tf_embs, inputlist2, name='matlist2'))
+        matlist2 = tf.matrix_transpose(tf.gather(tf_embs, inputlist2, name='matlist2'))
         S_dot = tf.batch_matmul(matlist1, matlist2)
         if self.sim == 'dot':
             # Calculation ends here for dot product.
@@ -143,7 +143,7 @@ class TFBatchLazyStringKernel(object):
         tf_pi = tf.constant(np.pi, dtype=tf.float64)
         tf_norms = tf.constant(self.norms, dtype=tf.float64, name='norms')
         normlist1 = tf.gather(tf_norms, inputlist1, name='normlist1')
-        normlist2 = tf.batch_matrix_transpose(tf.gather(tf_norms, inputlist2, name='normlist2'))
+        normlist2 = tf.matrix_transpose(tf.gather(tf_norms, inputlist2, name='normlist2'))
         S_norm = tf.batch_matmul(normlist1, normlist2)
         S_cosine = tf.truediv(S_dot, S_norm)
         # FIXME: ugly workaround for when S_cosine > 1
