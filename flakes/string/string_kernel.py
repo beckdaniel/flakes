@@ -60,7 +60,7 @@ class StringKernel(object):
         self.order_coefs = order_coefs
         self.wrapper = wrapper
         if mode == 'tf':
-            self._implementation = TFStringKernel(embs, device, config)
+            self._implementation = TFStringKernel(embs, sim, device, config)
         elif mode == 'tf-batch':
             self._implementation = TFBatchStringKernel(embs, device, batch_size, config)
         elif mode == 'tf-batch-lazy':

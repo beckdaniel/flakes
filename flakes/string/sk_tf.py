@@ -10,9 +10,14 @@ class TFStringKernel(object):
     """
     A TensorFlow string kernel implementation.
     """
-    def __init__(self, embs, device='/cpu:0', config=None):    
+    def __init__(self, embs, sim='dot', device='/cpu:0', config=None):    
         self.embs = embs
         self.embs_dim = embs.shape[1]
+        if sim == 'arccosine':
+            self.sim = self._arccosine
+            self.norms = np.sqrt(tnp.sum(pow(embs, 2), 1, keepdims=True))
+        elif sim == 'dot':
+            self.sim = self._dot
         self.graph = None
         self.maxlen = 0
         self.device = device
@@ -21,43 +26,54 @@ class TFStringKernel(object):
     def _k(self, s1, s2, params, sess):
         """
         Calculates k over two strings. Inputs can be strings or lists.
-        This is a Tensorflow version 
+        This method just calls a session and run the TF graph.
+        The inputs are transformed into embedding matrices with
+        additional zero padding if their length is smaller
+        than the length used in the graph.
         """
         embs = self.embs
         dim = self.embs_dim
-        s1 = build_input_matrix(s1, embs, length=self.maxlen, dim=dim)
-        s2 = build_input_matrix(s2, embs, length=self.maxlen, dim=dim)
-        feed_dict = {self._mat1: s1.T, self._mat2: s2.T,
+        s1 = self._pad(s1, self.maxlen)
+        s2 = self._pad(s2, self.maxlen)
+        feed_dict = {self._s1: s1, self._s2: s2,
                      self._gap: params[0], 
                      self._match: params[1],
                      self._coefs: np.array(params[2])[None, :]}
         output = sess.run(self.result, feed_dict=feed_dict)
         return output
 
+    def _pad(self, s, length):
+        new_s = np.zeros(length)
+        new_s[:len(s)] = s
+        return new_s
+
     def _build_graph(self, n, order):
         """
-        Builds the graph for TF calculation. This should
-        be usually called only once but can be called again
-        if we update the maximum string length in our
-        dataset.
+        Builds the graph for TF calculation. It builds all
+        tensors based on a maximum string length "n".
+        This should be usually called only once but can be called again
+        if we update the maximum string length in our dataset.
         """
         self.graph = tf.Graph()
         with self.graph.as_default(), tf.device(self.device):
+            # We preload word embeddings
+            tf_embs = tf.constant(self.embs, dtype=tf.float64, name='embs')
+
             # Strings will be represented as matrices of
             # embeddings and the similarity is just
             # the dot product. Hard match is replicated
             # by using one-hot embeddings.
-            self._mat1 = tf.placeholder("float", [None, n])
-            self._mat2 = tf.placeholder("float", [None, n])
-            S = tf.matmul(tf.transpose(self._mat1), self._mat2)
+            self._s1 = tf.placeholder("int32", [n])
+            self._s2 = tf.placeholder("int32", [n])
+            S = self.sim(self._s1, self._s2, tf_embs)
 
             # Kernel hyperparameters are also placeholders.
             # The K function is responsible for tying the
             # hyper values from class to this calculation
             # and to update the hyper gradients.
-            self._gap = tf.placeholder("float", [])
-            self._match = tf.placeholder("float", [])
-            self._coefs = tf.placeholder("float", [1, order])
+            self._gap = tf.placeholder("float64", [])
+            self._match = tf.placeholder("float64", [])
+            self._coefs = tf.placeholder("float64", [1, order])
             match_sq = self._match ** 2
 
             # Triangular matrices over decay powers.
@@ -67,20 +83,20 @@ class TFStringKernel(object):
             for k in xrange(n-1):
                 power[i2-k-1 == i1] = k
                 tril[i2-k-1 == i1] = 1.0
-            tf_tril = tf.constant(tril, dtype=tf.float32)
-            tf_power = tf.constant(power, dtype=tf.float32)
+            tf_tril = tf.constant(tril, dtype=tf.float64)
+            tf_power = tf.constant(power, dtype=tf.float64)
             gaps = tf.fill([n, n], self._gap)
             D = tf.pow(tf.mul(gaps, tril), power)
 
             # Initialize Kp, one for each n-gram order (including 0)
-            initial_Kp = tf.ones(shape=(order+1, n, n))
+            initial_Kp = tf.ones(shape=(order+1, n, n), dtype=tf.float64)
             Kp = taops.TensorArray(dtype=initial_Kp.dtype, size=order+1,
                                    tensor_array_name="Kp")
             Kp = Kp.unpack(initial_Kp)
 
             # Auxiliary Kp for using in While.
             acc_Kp = taops.TensorArray(dtype=initial_Kp.dtype, size=order+1,
-                                   tensor_array_name="ret_Kp")
+                                       tensor_array_name="ret_Kp")
 
             # Main loop, where Kp values are calculated.
             i = tf.constant(0)
@@ -110,6 +126,32 @@ class TFStringKernel(object):
             coef_grads = tf.gradients(result, self._coefs)
             all_stuff = [result] + gap_grads + match_grads + coef_grads
             self.result = all_stuff
+
+    def _dot(self, s1, s2, tf_embs):
+        """
+        Simple dot product between two vectors of embeddings.
+        This returns a matrix of positive real numbers.
+        """
+        mat1 = tf.gather(tf_embs, s1)
+        mat2 = tf.gather(tf_embs, s2)
+        #return tf.matmul(tf.transpose(mat1), mat2)
+        return tf.matmul(mat1, tf.transpose(mat2))
+
+    def _arccosine(self, embs1, embs2):
+        """
+        Uses an arccosine kernel of degree 0 to calculate
+        the similarity matrix between two vectors of embeddings. 
+        This is just cosine similarity projected into the [0,1] interval.
+        """
+        normembs1 = self.norms[embs1]
+        normembs2 = self.norms[embs2]
+        norms = np.dot(normembs1, normembs2.T)
+        dot = embs1.dot(embs2.T)
+        # We clip values due to numerical errors
+        # which put some values outside the arccosine range.
+        cosine = np.clip(dot / norms, -1, 1)
+        angle = np.arccos(cosine)
+        return 1 - (angle / np.pi)
 
     def K(self, X, X2, gram, params, diag=False):
         """

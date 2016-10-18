@@ -9,7 +9,7 @@ class NumpyStringKernel(object):
     slower than TensorFlow versions. Also
     kept for documentary and testing purposes.
     """
-    def __init__(self, embs, sim='arccosine'):
+    def __init__(self, embs, sim='dot'):
         self.embs = embs
         self.embs_dim = embs.shape[1]
         if sim == 'arccosine':
@@ -66,7 +66,6 @@ class NumpyStringKernel(object):
             daux2_dgap = daux1_dgap.dot(D[0:m, 0:m]) + aux1.dot(dD_dgap[0:m, 0:m])
             dKpp_dgap = match_sq * daux2_dgap
             dKp_dgap[i + 1] = dKpp_dgap.T.dot(D[0:n, 0:n]).T + Kpp.T.dot(dD_dgap[0:n, 0:n]).T
-            #dKp_dgap[i] = dKpp_dgap.T.dot(D[0:n, 0:n]) + Kpp.T.dot(dD_dgap[0:n, 0:n])
 
             daux1_dmatch = S * dKp_dmatch[i]
             daux2_dmatch = daux1_dmatch.dot(D[0:m, 0:m])
