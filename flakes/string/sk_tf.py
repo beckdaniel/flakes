@@ -15,7 +15,7 @@ class TFStringKernel(object):
         self.embs_dim = embs.shape[1]
         if sim == 'arccosine':
             self.sim = self._arccosine
-            self.norms = np.sqrt(tnp.sum(pow(embs, 2), 1, keepdims=True))
+            self.norms = np.sqrt(np.sum(pow(embs, 2), 1, keepdims=True))
         elif sim == 'dot':
             self.sim = self._dot
         self.graph = None
@@ -134,24 +134,27 @@ class TFStringKernel(object):
         """
         mat1 = tf.gather(tf_embs, s1)
         mat2 = tf.gather(tf_embs, s2)
-        #return tf.matmul(tf.transpose(mat1), mat2)
         return tf.matmul(mat1, tf.transpose(mat2))
 
-    def _arccosine(self, embs1, embs2):
+    def _arccosine(self, s1, s2, tf_embs):
         """
         Uses an arccosine kernel of degree 0 to calculate
         the similarity matrix between two vectors of embeddings. 
         This is just cosine similarity projected into the [0,1] interval.
         """
-        normembs1 = self.norms[embs1]
-        normembs2 = self.norms[embs2]
-        norms = np.dot(normembs1, normembs2.T)
-        dot = embs1.dot(embs2.T)
+        tf_pi = tf.constant(np.pi, dtype=tf.float64)
+        mat1 = tf.gather(tf_embs, s1)
+        mat2 = tf.gather(tf_embs, s2)
+        tf_norms = tf.constant(self.norms, dtype=tf.float64, name='norms')
+        norms1 = tf.gather(tf_norms, s1)
+        norms2 = tf.gather(tf_norms, s2)
+        dot = tf.matmul(mat1, tf.transpose(mat2))
+        norms = tf.matmul(norms1, tf.transpose(norms2))
         # We clip values due to numerical errors
         # which put some values outside the arccosine range.
-        cosine = np.clip(dot / norms, -1, 1)
-        angle = np.arccos(cosine)
-        return 1 - (angle / np.pi)
+        cosine = tf.clip(dot / norms, -1, 1)
+        angle = tf.acos(cosine)
+        return 1 - (angle / tf_pi)
 
     def K(self, X, X2, gram, params, diag=False):
         """

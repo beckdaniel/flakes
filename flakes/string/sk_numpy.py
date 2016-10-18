@@ -14,7 +14,7 @@ class NumpyStringKernel(object):
         self.embs_dim = embs.shape[1]
         if sim == 'arccosine':
             self.sim = self._arccosine
-            self.norms = np.sqrt(tnp.sum(pow(embs, 2), 1, keepdims=True))
+            self.norms = np.sqrt(np.sum(pow(embs, 2), 1, keepdims=True))
         elif sim == 'dot':
             self.sim = self._dot
 
