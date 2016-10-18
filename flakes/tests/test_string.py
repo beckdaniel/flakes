@@ -141,9 +141,9 @@ class StringKernelComparisonTests(unittest.TestCase):
         self.assertAlmostEqual(np.sum(self.k_tf.coef_grads)/1000, np.sum(self.k_np.coef_grads)/1000, places=2)
 
     def test_compare_tf_and_numpy_based_acos(self):
-        X = [[self.s1], [self.s2], [self.s3], [self.s4]]
+        #X = [[self.s1], [self.s2], [self.s3], [self.s4]]
         #X = [[self.s1], [self.s2], [self.s3]]
-        #X = [[self.s1], [self.s2]]#, [self.s3]]
+        X = [[self.s1], [self.s2]]#, [self.s3]]
         self.k_tf_acos.order_coefs = [0.1, 0.2, 0.4, 0.5]#, 0.7]
         self.k_tf_acos.gap_decay = 0.8
         self.k_tf_acos.match_decay = 0.8

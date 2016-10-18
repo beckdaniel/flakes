@@ -32,8 +32,8 @@ class NumpyStringKernel(object):
         order = len(coefs)
 
         # Transform inputs into embedding matrices
-        embs1 = self.embs[s1]
-        embs2 = self.embs[s2]
+        #embs1 = self.embs[s1]
+        #embs2 = self.embs[s2]
         
         # Triangular matrix over decay powers
         maxlen = max(n, m)
@@ -48,7 +48,8 @@ class NumpyStringKernel(object):
         dD_dgap = ((gaps * tril) ** (power - 1.0)) * tril * power
 
         # Store sim(j, k) values
-        S = self.sim(embs1, embs2)
+        S = self.sim(s1, s2)
+        #print S
 
         # Initializing auxiliary variables
         Kp = np.ones(shape=(order, n, m))
@@ -95,26 +96,35 @@ class NumpyStringKernel(object):
 
         return k, dk_dgap, dk_dmatch, dk_dcoefs
 
-    def _dot(self, embs1, embs2):
+    def _dot(self, s1, s2):
         """
         Simple dot product between two vectors of embeddings.
         This returns a matrix of positive real numbers.
         """
+        embs1 = self.embs[s1]
+        embs2 = self.embs[s2]
         return embs1.dot(embs2.T)
 
-    def _arccosine(self, embs1, embs2):
+    def _arccosine(self, s1, s2):
         """
         Uses an arccosine kernel of degree 0 to calculate
         the similarity matrix between two vectors of embeddings. 
         This is just cosine similarity projected into the [0,1] interval.
         """
-        normembs1 = self.norms[embs1]
-        normembs2 = self.norms[embs2]
+        embs1 = self.embs[s1]
+        embs2 = self.embs[s2]
+        normembs1 = self.norms[s1]
+        normembs2 = self.norms[s2]
+        #print self.norms
         norms = np.dot(normembs1, normembs2.T)
+        #print s1
+        #print s2
+        #print norms
         dot = embs1.dot(embs2.T)
         # We clip values due to numerical errors
         # which put some values outside the arccosine range.
         cosine = np.clip(dot / norms, -1, 1)
+        #print cosine
         angle = np.arccos(cosine)
         return 1 - (angle / np.pi)
 

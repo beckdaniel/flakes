@@ -39,6 +39,7 @@ class TFStringKernel(object):
                      self._gap: params[0], 
                      self._match: params[1],
                      self._coefs: np.array(params[2])[None, :]}
+        sess.run(self._init_op, feed_dict=feed_dict)
         output = sess.run(self.result, feed_dict=feed_dict)
         return output
 
@@ -56,6 +57,7 @@ class TFStringKernel(object):
         """
         self.graph = tf.Graph()
         with self.graph.as_default(), tf.device(self.device):
+
             # We preload word embeddings
             tf_embs = tf.constant(self.embs, dtype=tf.float64, name='embs')
 
@@ -65,7 +67,8 @@ class TFStringKernel(object):
             # by using one-hot embeddings.
             self._s1 = tf.placeholder("int32", [n])
             self._s2 = tf.placeholder("int32", [n])
-            S = self.sim(self._s1, self._s2, tf_embs)
+            S = self.sim(self._s1, self._s2, tf_embs, n)
+            #S = tf.Print(S, [S], summarize=100)
 
             # Kernel hyperparameters are also placeholders.
             # The K function is responsible for tying the
@@ -126,8 +129,9 @@ class TFStringKernel(object):
             coef_grads = tf.gradients(result, self._coefs)
             all_stuff = [result] + gap_grads + match_grads + coef_grads
             self.result = all_stuff
+            self._init_op = tf.initialize_all_variables()
 
-    def _dot(self, s1, s2, tf_embs):
+    def _dot(self, s1, s2, tf_embs, n):
         """
         Simple dot product between two vectors of embeddings.
         This returns a matrix of positive real numbers.
@@ -136,24 +140,29 @@ class TFStringKernel(object):
         mat2 = tf.gather(tf_embs, s2)
         return tf.matmul(mat1, tf.transpose(mat2))
 
-    def _arccosine(self, s1, s2, tf_embs):
+    def _arccosine(self, s1, s2, tf_embs, n):
         """
         Uses an arccosine kernel of degree 0 to calculate
         the similarity matrix between two vectors of embeddings. 
         This is just cosine similarity projected into the [0,1] interval.
         """
+        #s1 = tf.Print(s1, [s1], summarize=100)
+        #s2 = tf.Print(s2, [s2], summarize=100)
         tf_pi = tf.constant(np.pi, dtype=tf.float64)
         mat1 = tf.gather(tf_embs, s1)
         mat2 = tf.gather(tf_embs, s2)
         tf_norms = tf.constant(self.norms, dtype=tf.float64, name='norms')
+        #tf_norms = tf.Print(tf_norms, [tf_norms], summarize=100)
         norms1 = tf.gather(tf_norms, s1)
         norms2 = tf.gather(tf_norms, s2)
         dot = tf.matmul(mat1, tf.transpose(mat2))
         norms = tf.matmul(norms1, tf.transpose(norms2))
-        # We clip values due to numerical errors
-        # which put some values outside the arccosine range.
-        cosine = tf.clip(dot / norms, -1, 1)
+        cosine = tf.clip_by_value(dot / norms, -1, 1)
         angle = tf.acos(cosine)
+        # The 0 vector has norm 0, which generates a NaN.
+        # We catch these NaNs and replace them with pi,
+        # which ends up returning 0 similarity.
+        angle = tf.select(tf.is_nan(angle), tf.ones_like(angle) * np.pi, angle)
         return 1 - (angle / tf_pi)
 
     def K(self, X, X2, gram, params, diag=False):
@@ -178,6 +187,8 @@ class TFStringKernel(object):
 
         # We also start a TF session
         sess = tf.Session(graph=self.graph, config=self.tf_config)
+
+
 
         # Initialize return values
         k_result = np.zeros(shape=(len(X), len(X2)))
