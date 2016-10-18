@@ -148,9 +148,9 @@ class TFBatchStringKernel(object):
             dk_dmatch = tf.squeeze(tf.matmul(self._coefs, dKi_dmatch))
 
             dk_dcoefs = Ki
-
+            
             self.result = (k_result, dk_dgap, dk_dmatch, dk_dcoefs)
-
+            
 
     def K(self, X, X2, gram, params, diag=False):
         """
@@ -179,7 +179,8 @@ class TFBatchStringKernel(object):
                 self._build_graph(maxlen, order, X)
                 indices = [[i1, i1] for i1 in range(len(X))]
             else:
-                maxlen = max([len(x[0]) for x in np.concatenate((X, X2))])
+                #maxlen = max([len(x[0]) for x in np.concatenate((X, X2))])
+                maxlen = max([len(x[0]) for x in list(X) + list(X2)])
                 X = self._code_and_pad(X, maxlen)
                 X2 = self._code_and_pad(X2, maxlen)
                 self.maxlen = maxlen

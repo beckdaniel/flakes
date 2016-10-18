@@ -65,24 +65,36 @@ class NumpyStringKernel(object):
             daux1_dgap = S * dKp_dgap[i]
             daux2_dgap = daux1_dgap.dot(D[0:m, 0:m]) + aux1.dot(dD_dgap[0:m, 0:m])
             dKpp_dgap = match_sq * daux2_dgap
-            dKp_dgap[i] = dKpp_dgap.T.dot(D[0:n, 0:n]).T + dKpp_dgap.T.dot(dD_dgap[0:n, 0:n]).T
+            dKp_dgap[i + 1] = dKpp_dgap.T.dot(D[0:n, 0:n]).T + Kpp.T.dot(dD_dgap[0:n, 0:n]).T
+            #dKp_dgap[i] = dKpp_dgap.T.dot(D[0:n, 0:n]) + Kpp.T.dot(dD_dgap[0:n, 0:n])
 
             daux1_dmatch = S * dKp_dmatch[i]
             daux2_dmatch = daux1_dmatch.dot(D[0:m, 0:m])
             dKpp_dmatch = (match_sq * daux2_dmatch) + (2 * match * aux2)
-            dKp_dmatch[i] = dKpp_dmatch.T.dot(D[0:n, 0:n]).T
-
-            #Kpp = match_sq * (S * Kp[i]).dot(D[0:m, 0:m])
-            #Kp[i + 1] = Kpp.T.dot(D[0:n, 0:n]).T
-            
+            dKp_dmatch[i + 1] = dKpp_dmatch.T.dot(D[0:n, 0:n]).T
 
         # Final calculation
         aux1 = S * Kp
         aux2 = np.sum(aux1, axis=1)
         aux3 = np.sum(aux2, axis=1)
         Ki = match_sq * aux3
-        #Ki = np.sum(np.sum(S * Kp[:-1], axis=1), axis=1) * match_sq
-        return Ki.dot(coefs)
+        k = Ki.dot(coefs)
+
+        daux1_dgap = S * dKp_dgap
+        daux2_dgap = np.sum(daux1_dgap, axis=1)
+        daux3_dgap = np.sum(daux2_dgap, axis=1)
+        dKi_dgap = match_sq * daux3_dgap
+        dk_dgap = dKi_dgap.dot(coefs)
+        
+        daux1_dmatch = S * dKp_dmatch
+        daux2_dmatch = np.sum(daux1_dmatch, axis=1)
+        daux3_dmatch = np.sum(daux2_dmatch, axis=1)
+        dKi_dmatch = match_sq * daux3_dmatch + (2 * match * aux3)
+        dk_dmatch = dKi_dmatch.dot(coefs)
+
+        dk_dcoefs = Ki
+
+        return k, dk_dgap, dk_dmatch, dk_dcoefs
 
     def _dot(self, embs1, embs2):
         """
@@ -113,10 +125,22 @@ class NumpyStringKernel(object):
         of strings. These should be encoded as lists of integers.
         """
         k_result = np.zeros(shape=(len(X), len(X2)))
+        gap_grads = np.zeros(shape=(len(X), len(X2)))
+        match_grads = np.zeros(shape=(len(X), len(X2)))
+        order = len(params[2])
+        coef_grads = np.zeros(shape=(len(X), len(X2), order))
         for i, x1 in enumerate(X):
             for j, x2 in enumerate(X2):
                 if gram and (j < i):
                     k_result[i, j] = k_result[j, i]
+                    gap_grads[i, j] = gap_grads[j, i]
+                    match_grads[i, j] = match_grads[j, i]
+                    coef_grads[i, j] = coef_grads[j, i]
                 else:
-                    k_result[i, j] = self._k(x1[0], x2[0], params)
-        return k_result, 0, 0, 0
+                    #k_result[i, j] = self._k(x1[0], x2[0], params)
+                    result = self._k(x1[0], x2[0], params)
+                    k_result[i, j] = result[0]
+                    gap_grads[i, j] = result[1]
+                    match_grads[i, j] = result[2]
+                    coef_grads[i, j] = np.array(result[3:])
+        return k_result, gap_grads, match_grads, coef_grads
