@@ -338,15 +338,8 @@ class TFBatchStringKernel(object):
         # enter gram mode. In gram mode we skip
         # graph rebuilding.
         if gram:
-            #maxlen = max([len(x[0]) for x in X])
-            #X = self._code_and_pad(X, maxlen)
-            #X = [self._pad(x[0], self.maxlen) for x in X]
-            #X2 = X
             if not self.gram_mode:
                 maxlen = max([len(x[0]) for x in X])
-                #X = self._code_and_pad(X, maxlen)
-                #X = [self._pad(x[0], maxlen) for x in X]
-                #X2 = X
                 self.maxlen = maxlen
                 self.gram_mode = True
                 self._build_graph(maxlen, order, X)
@@ -357,16 +350,12 @@ class TFBatchStringKernel(object):
             self.gram_mode = False
             if diag:
                 maxlen = max([len(x[0]) for x in X])
-                #X = self._code_and_pad(X, maxlen)
                 X = [self._pad(x[0], maxlen) for x in X]
                 self.maxlen = maxlen
                 self._build_graph(maxlen, order, X)
                 indices = [[i1, i1] for i1 in range(len(X))]
             else:
                 maxlen = max([len(x[0]) for x in list(X) + list(X2)])
-                #maxlen = max([len(x[0]) for x in np.concatenate((X, X2))])
-                #X = self._code_and_pad(X, maxlen)
-                #X2 = self._code_and_pad(X2, maxlen)
                 X = [self._pad(x[0], maxlen) for x in X]
                 X2 = [self._pad(x[0], maxlen) for x in X2]
                 self.maxlen = maxlen
@@ -395,28 +384,20 @@ class TFBatchStringKernel(object):
 
         while indices != []:
             items = indices[:self.BATCH_SIZE]
-            #if len(items) < self.BATCH_SIZE:
-                # padding
-            #    items += [[0, 0]] * (self.BATCH_SIZE - len(items))
-            #items1 = [elem[0] for elem in items]
-            #items2 = [elem[1] for elem in items]
             slist1 = [X[i[0]] for i in items]
             slist2 = [X2[i[1]] for i in items]
-            #print slist1
-            print slist2
-            if len(items) < self.BATCH_SIZE: 
+            if len(items) < self.BATCH_SIZE:
+                # Padding
                 slist1 = np.array(slist1 + [[0] * self.maxlen] * (self.BATCH_SIZE - len(items)))
                 slist2 = np.array(slist2 + [[0] * self.maxlen] * (self.BATCH_SIZE - len(items)))
             else:
                 slist1 = np.array(slist1)
                 slist2 = np.array(slist2)
-            #print slist1
-            print slist2
             feed_dict = {self._gap: params[0], 
                          self._match: params[1],
                          self._coefs: np.array(params[2])[None, :],
-                         self._slist1: np.array(slist1),
-                         self._slist2: np.array(slist2)
+                         self._slist1: slist1,
+                         self._slist2: slist2
                      }
             before = datetime.datetime.now()
             result = sess.run(self.result, feed_dict=feed_dict,
