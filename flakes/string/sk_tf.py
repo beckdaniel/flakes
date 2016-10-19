@@ -88,16 +88,6 @@ class TFStringKernel(object):
             gaps = tf.fill([n, n], self._gap)
             D = tf.pow(tf.mul(gaps, tril), power)
 
-            # Initialize Kp, one for each n-gram order (including 0)
-            initial_Kp = tf.ones(shape=(order+1, n, n), dtype=tf.float64)
-            Kp = taops.TensorArray(dtype=initial_Kp.dtype, size=order+1,
-                                   tensor_array_name="Kp")
-            Kp = Kp.unpack(initial_Kp)
-
-            # Auxiliary Kp for using in While.
-            acc_Kp = taops.TensorArray(dtype=initial_Kp.dtype, size=order+1,
-                                       tensor_array_name="ret_Kp")
-
             # Main loop, where Kp values are calculated.
             Kp = []
             Kp.append(tf.ones(shape=(n, n), dtype="float64"))
@@ -106,7 +96,6 @@ class TFStringKernel(object):
                 aux2 = tf.matmul(aux1, D)
                 Kpp = match_sq * aux2
                 Kp.append(tf.transpose(tf.matmul(tf.transpose(Kpp), D)))
-
             final_Kp = tf.pack(Kp)
 
             # Final calculation. We gather all Kps and
