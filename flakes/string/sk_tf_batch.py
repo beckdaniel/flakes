@@ -21,11 +21,15 @@ class TFBatchStringKernel(object):
                  config=None, trace=None):    
         self.embs = embs
         self.embs_dim = embs.shape[1]
-        self.sim = sim
         self.wrapper = wrapper
         self.index = index
-        self.norms = np.sqrt(np.sum(pow(embs, 2), 1, keepdims=True))
-        self.norms[0] = 1.0 # avoid division by zero
+        if sim == 'arccosine':
+            self.sim = self._arccosine
+            self.norms = np.sqrt(np.sum(pow(embs, 2), 1, keepdims=True))
+        elif sim == 'dot':
+            self.sim = self._dot
+        #self.norms = np.sqrt(np.sum(pow(embs, 2), 1, keepdims=True))
+        #self.norms[0] = 1.0 # avoid division by zero
         self.graph = None
         self.maxlen = 0
         self.device = device
@@ -69,7 +73,8 @@ class TFBatchStringKernel(object):
 
             # Similarity matrix calculation. This is the only
             # place where the embeddings are used.
-            S = self._init_sim_matrix(tf_X, tf_X2, tf_embs)
+            #S = self._init_sim_matrix(tf_X, tf_X2, tf_embs)
+            S = self.sim(tf_X, tf_X2, tf_embs)
 
             # Kp and gradient matrices initialisation
             Kp, dKp_dgap, dKp_dmatch = self._init_Kp(n)
@@ -152,6 +157,44 @@ class TFBatchStringKernel(object):
         S_dist = S_angle / tf_pi
         S = 1.0 - S_dist
         return S
+
+    def _dot(self, tf_X, tf_X2, tf_embs):
+        """
+        Simple dot product between two vectors of embeddings.
+        This returns a matrix of positive real numbers.
+        """
+        inputlist1 = tf.gather(tf_X, self._indices1, name='inputlist1')
+        inputlist2 = tf.gather(tf_X2, self._indices2, name='inputlist2')
+        matlist1 = tf.gather(tf_embs, inputlist1, name='matlist1')
+        matlist2 = tf.matrix_transpose(tf.gather(tf_embs, inputlist2, name='matlist2'))
+        return tf.batch_matmul(matlist1, matlist2)
+
+    def _arccosine(self, tf_X, tf_X2, tf_embs):
+        """
+        Uses an arccosine kernel of degree 0 to calculate
+        the similarity matrix between two vectors of embeddings. 
+        This is just cosine similarity projected into the [0,1] interval.
+        """
+        dot = self._dot(tf_X, tf_X2, tf_embs)
+        # This calculation corresponds to an arc-cosine with 
+        # degree 0. It can be interpreted as cosine
+        # similarity but projected into a [0,1] interval.
+        # TODO: arc-cosine with degree 1.
+        tf_pi = tf.constant(np.pi, dtype=tf.float64)
+        tf_norms = tf.constant(self.norms, dtype=tf.float64, name='norms')
+        normlist1 = tf.gather(tf_norms, inputlist1, name='normlist1')
+        normlist2 = tf.matrix_transpose(tf.gather(tf_norms, inputlist2, name='normlist2'))
+        norms = tf.batch_matmul(normlist1, normlist2)
+        cosine = tf.clip_by_value(tf.truediv(dot, norms), -1, 1)
+        angle = tf.acos(cosine)
+        angle = tf.select(tf.is_nan(angle), tf.ones_like(angle) * tf_pi, angle)
+        return 1 - (angle / tf_pi)
+        # FIXME: ugly workaround for when S_cosine > 1
+        # due to numerical errors.
+        #angle = tf.acos(cosine - 1e-6)
+        #S_dist = S_angle / tf_pi
+        #S = 1.0 - S_dist
+        #return S
 
     def _init_Kp(self, n):
         """

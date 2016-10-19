@@ -65,7 +65,7 @@ class TFStringKernel(object):
             # by using one-hot embeddings.
             self._s1 = tf.placeholder("int32", [n])
             self._s2 = tf.placeholder("int32", [n])
-            S = self.sim(self._s1, self._s2, tf_embs, n)
+            S = self.sim(self._s1, self._s2, tf_embs)
 
             # Kernel hyperparameters are also placeholders.
             # The K function is responsible for tying the
@@ -110,7 +110,7 @@ class TFStringKernel(object):
             all_stuff = [result] + gap_grads + match_grads + coef_grads
             self.result = all_stuff
 
-    def _dot(self, s1, s2, tf_embs, n):
+    def _dot(self, s1, s2, tf_embs):
         """
         Simple dot product between two vectors of embeddings.
         This returns a matrix of positive real numbers.
@@ -119,7 +119,7 @@ class TFStringKernel(object):
         mat2 = tf.gather(tf_embs, s2)
         return tf.matmul(mat1, tf.transpose(mat2))
 
-    def _arccosine(self, s1, s2, tf_embs, n):
+    def _arccosine(self, s1, s2, tf_embs):
         """
         Uses an arccosine kernel of degree 0 to calculate
         the similarity matrix between two vectors of embeddings. 
