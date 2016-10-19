@@ -65,7 +65,7 @@ class StringKernelComparisonTests(unittest.TestCase):
         self.k_np_acos = flakes.string.StringKernel(mode='numpy', alphabet=alphabet, sim='arccosine')
         self.k_tf_acos = flakes.string.StringKernel(mode='tf',alphabet=alphabet, sim='arccosine')
         self.k_tf_preload = flakes.string.StringKernel(mode='tf-batch-preload', alphabet=alphabet)  
-        self.k_tf_batch = flakes.string.StringKernel(mode='tf-batch', alphabet=alphabet, wrapper='none')
+        self.k_tf_batch = flakes.string.StringKernel(mode='tf-batch', alphabet=alphabet, wrapper='none', batch_size=10)
 
     def test_compare_1(self):
         self.k_tf.order_coefs = [0.1, 0.2, 0.4, 0.5, 0.7]
@@ -196,8 +196,8 @@ class StringKernelGradientTests(unittest.TestCase):
         self.k_np = flakes.string.StringKernel(mode='numpy', alphabet=alphabet, sim='dot')
         self.k_tf = flakes.string.StringKernel(mode='tf',alphabet=alphabet)
         self.k_tf_preload = flakes.string.StringKernel(mode='tf-batch-preload', alphabet=alphabet)  
-        self.k_tf_batch = flakes.string.StringKernel(mode='tf-batch', alphabet=alphabet, wrapper='none')
-        self.k_tf_batch_norm = flakes.string.StringKernel(mode='tf-batch', alphabet=alphabet, wrapper='norm')
+        self.k_tf_batch = flakes.string.StringKernel(mode='tf-batch', alphabet=alphabet, wrapper='none', batch_size=10)
+        self.k_tf_batch_norm = flakes.string.StringKernel(mode='tf-batch', alphabet=alphabet, wrapper='norm', batch_size=10)
 
     def test_gradient_gap_1(self):
         #self.k_tf.order_coefs = [0.1, 0.2, 0.4, 0.5, 0.7]

@@ -46,14 +46,14 @@ class TFBatchStringKernel(object):
         if we update the maximum string length in our
         dataset.
         """
-        if X2 == None:
-            X2 = X.copy()
+        #if X2 == None:
+        #    X2 = X.copy()
         self.graph = tf.Graph()
         with self.graph.as_default(), tf.device(self.device):
             # Datasets are loaded as constants. Useful for GPUs.
             # Only feasible for small datasets though.
-            tf_X = tf.constant(X, dtype=tf.int32, name='X')
-            tf_X2 = tf.constant(X2, dtype=tf.int32, name='X2')
+            #tf_X = tf.constant(X, dtype=tf.int32, name='X')
+            #tf_X2 = tf.constant(X2, dtype=tf.int32, name='X2')
 
             # Embeddings are loaded as constants
             tf_embs = tf.constant(self.embs, dtype=tf.float64, name='embs')
@@ -65,19 +65,22 @@ class TFBatchStringKernel(object):
             self._gap = tf.placeholder("float64", [], name='gap_decay')
             self._match = tf.placeholder("float64", [], name='match_decay')
             self._coefs = tf.placeholder("float64", [1, order], name='coefs')
-            self._indices1 = tf.placeholder("int32", [self.BATCH_SIZE], name='indices1')
-            self._indices2 = tf.placeholder("int32", [self.BATCH_SIZE], name='indices2')
+            #self._indices1 = tf.placeholder("int32", [self.BATCH_SIZE], name='indices1')
+            #self._indices2 = tf.placeholder("int32", [self.BATCH_SIZE], name='indices2')
+            self._slist1 = tf.placeholder("int32", [self.BATCH_SIZE, n], name='slist1')
+            self._slist2 = tf.placeholder("int32", [self.BATCH_SIZE, n], name='slist2')
             
             # Decay constants are initialised here
             D, dD_dgap, match_sq = self._init_constants(n)
 
             # Similarity matrix calculation. This is the only
             # place where the embeddings are used.
-            #S = self._init_sim_matrix(tf_X, tf_X2, tf_embs)
-            S = self.sim(tf_X, tf_X2, tf_embs)
+            S = self.sim(self._slist1, self._slist2, tf_embs)
+            #print S.get_shape()
 
             # Kp and gradient matrices initialisation
             Kp, dKp_dgap, dKp_dmatch = self._init_Kp(n)
+            #print Kp[0].get_shape()
 
             # Main kernel calculation happens here.
             # "i" correspond to the ngram order.
@@ -125,48 +128,19 @@ class TFBatchStringKernel(object):
         match_sq = tf.pow(self._match, 2, name='match_sq')
         return D, dD_dgap, match_sq
 
-    def _init_sim_matrix(self, tf_X, tf_X2, tf_embs):
-        """
-        Initialise the symbol similarity matrix. This is
-        where the different similarity measures are used.
-        Hard match can be achieved using the 'dot' sim
-        method and one-hot embeddings.
-        """
-        inputlist1 = tf.gather(tf_X, self._indices1, name='inputlist1')
-        inputlist2 = tf.gather(tf_X2, self._indices2, name='inputlist2')
-        matlist1 = tf.gather(tf_embs, inputlist1, name='matlist1')
-        matlist2 = tf.matrix_transpose(tf.gather(tf_embs, inputlist2, name='matlist2'))
-        S_dot = tf.batch_matmul(matlist1, matlist2)
-        if self.sim == 'dot':
-            # Calculation ends here for dot product.
-            return S_dot
-
-        # This calculation corresponds to an arc-cosine with 
-        # degree 0. It can be interpreted as cosine
-        # similarity but projected into a [0,1] interval.
-        # TODO: arc-cosine with degree 1.
-        tf_pi = tf.constant(np.pi, dtype=tf.float64)
-        tf_norms = tf.constant(self.norms, dtype=tf.float64, name='norms')
-        normlist1 = tf.gather(tf_norms, inputlist1, name='normlist1')
-        normlist2 = tf.matrix_transpose(tf.gather(tf_norms, inputlist2, name='normlist2'))
-        S_norm = tf.batch_matmul(normlist1, normlist2)
-        S_cosine = tf.truediv(S_dot, S_norm)
-        # FIXME: ugly workaround for when S_cosine > 1
-        # due to numerical errors.
-        S_angle = tf.acos(S_cosine - 1e-6)
-        S_dist = S_angle / tf_pi
-        S = 1.0 - S_dist
-        return S
-
-    def _dot(self, tf_X, tf_X2, tf_embs):
+    def _dot(self, slist1, slist2, tf_embs):
         """
         Simple dot product between two vectors of embeddings.
         This returns a matrix of positive real numbers.
         """
-        inputlist1 = tf.gather(tf_X, self._indices1, name='inputlist1')
-        inputlist2 = tf.gather(tf_X2, self._indices2, name='inputlist2')
-        matlist1 = tf.gather(tf_embs, inputlist1, name='matlist1')
-        matlist2 = tf.matrix_transpose(tf.gather(tf_embs, inputlist2, name='matlist2'))
+        #inputlist1 = tf.gather(tf_X, self._indices1, name='inputlist1')
+        #inputlist2 = tf.gather(tf_X2, self._indices2, name='inputlist2')
+        #matlist1 = tf.gather(tf_embs, inputlist1, name='matlist1')
+        #matlist2 = tf.matrix_transpose(tf.gather(tf_embs, inputlist2, name='matlist2'))
+        matlist1 = tf.gather(tf_embs, slist1, name='matlist1')
+        matlist2 = tf.matrix_transpose(tf.gather(tf_embs, slist2, name='matlist2'))
+        #print slist1.get_shape()
+        #print matlist1.get_shape()
         return tf.batch_matmul(matlist1, matlist2)
 
     def _arccosine(self, tf_X, tf_X2, tf_embs):
@@ -189,12 +163,6 @@ class TFBatchStringKernel(object):
         angle = tf.acos(cosine)
         angle = tf.select(tf.is_nan(angle), tf.ones_like(angle) * tf_pi, angle)
         return 1 - (angle / tf_pi)
-        # FIXME: ugly workaround for when S_cosine > 1
-        # due to numerical errors.
-        #angle = tf.acos(cosine - 1e-6)
-        #S_dist = S_angle / tf_pi
-        #S = 1.0 - S_dist
-        #return S
 
     def _init_Kp(self, n):
         """
@@ -370,25 +338,37 @@ class TFBatchStringKernel(object):
         # enter gram mode. In gram mode we skip
         # graph rebuilding.
         if gram:
+            #maxlen = max([len(x[0]) for x in X])
+            #X = self._code_and_pad(X, maxlen)
+            #X = [self._pad(x[0], self.maxlen) for x in X]
+            #X2 = X
             if not self.gram_mode:
                 maxlen = max([len(x[0]) for x in X])
-                X = self._code_and_pad(X, maxlen)
+                #X = self._code_and_pad(X, maxlen)
+                #X = [self._pad(x[0], maxlen) for x in X]
+                #X2 = X
                 self.maxlen = maxlen
                 self.gram_mode = True
                 self._build_graph(maxlen, order, X)
+            X = [self._pad(x[0], self.maxlen) for x in X]
+            X2 = X
             indices = [[i1, i2] for i1 in range(len(X)) for i2 in range(len(X2)) if i1 >= i2]
         else: # We rebuild the graph, usually for predictions
             self.gram_mode = False
             if diag:
                 maxlen = max([len(x[0]) for x in X])
-                X = self._code_and_pad(X, maxlen)
+                #X = self._code_and_pad(X, maxlen)
+                X = [self._pad(x[0], maxlen) for x in X]
                 self.maxlen = maxlen
                 self._build_graph(maxlen, order, X)
                 indices = [[i1, i1] for i1 in range(len(X))]
             else:
-                maxlen = max([len(x[0]) for x in np.concatenate((X, X2))])
-                X = self._code_and_pad(X, maxlen)
-                X2 = self._code_and_pad(X2, maxlen)
+                maxlen = max([len(x[0]) for x in list(X) + list(X2)])
+                #maxlen = max([len(x[0]) for x in np.concatenate((X, X2))])
+                #X = self._code_and_pad(X, maxlen)
+                #X2 = self._code_and_pad(X2, maxlen)
+                X = [self._pad(x[0], maxlen) for x in X]
+                X2 = [self._pad(x[0], maxlen) for x in X2]
                 self.maxlen = maxlen
                 self._build_graph(maxlen, order, X, X2)
                 indices = [[i1, i2] for i1 in range(len(X)) for i2 in range(len(X2))]
@@ -412,18 +392,31 @@ class TFBatchStringKernel(object):
         sess = tf.Session(graph=self.graph, config=self.tf_config)
 
         indices_copy = copy.deepcopy(indices)
+
         while indices != []:
             items = indices[:self.BATCH_SIZE]
-            if len(items) < self.BATCH_SIZE:
+            #if len(items) < self.BATCH_SIZE:
                 # padding
-                items += [[0, 0]] * (self.BATCH_SIZE - len(items))
-            items1 = [elem[0] for elem in items]
-            items2 = [elem[1] for elem in items]
+            #    items += [[0, 0]] * (self.BATCH_SIZE - len(items))
+            #items1 = [elem[0] for elem in items]
+            #items2 = [elem[1] for elem in items]
+            slist1 = [X[i[0]] for i in items]
+            slist2 = [X2[i[1]] for i in items]
+            #print slist1
+            print slist2
+            if len(items) < self.BATCH_SIZE: 
+                slist1 = np.array(slist1 + [[0] * self.maxlen] * (self.BATCH_SIZE - len(items)))
+                slist2 = np.array(slist2 + [[0] * self.maxlen] * (self.BATCH_SIZE - len(items)))
+            else:
+                slist1 = np.array(slist1)
+                slist2 = np.array(slist2)
+            #print slist1
+            print slist2
             feed_dict = {self._gap: params[0], 
                          self._match: params[1],
                          self._coefs: np.array(params[2])[None, :],
-                         self._indices1: np.array(items1),
-                         self._indices2: np.array(items2)
+                         self._slist1: np.array(slist1),
+                         self._slist2: np.array(slist2)
                      }
             before = datetime.datetime.now()
             result = sess.run(self.result, feed_dict=feed_dict,
@@ -507,3 +500,8 @@ class TFBatchStringKernel(object):
             if elem[0] != elem[1] and gram:
                 result[elem[1], elem[0]] = vector[i]
         return result
+
+    def _pad(self, s, length):
+        new_s = np.zeros(length)
+        new_s[:len(s)] = s
+        return new_s
