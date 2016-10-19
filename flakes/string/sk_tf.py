@@ -39,7 +39,6 @@ class TFStringKernel(object):
                      self._gap: params[0], 
                      self._match: params[1],
                      self._coefs: np.array(params[2])[None, :]}
-        sess.run(self._init_op, feed_dict=feed_dict)
         output = sess.run(self.result, feed_dict=feed_dict)
         return output
 
@@ -57,7 +56,6 @@ class TFStringKernel(object):
         """
         self.graph = tf.Graph()
         with self.graph.as_default(), tf.device(self.device):
-
             # We preload word embeddings
             tf_embs = tf.constant(self.embs, dtype=tf.float64, name='embs')
 
@@ -68,7 +66,6 @@ class TFStringKernel(object):
             self._s1 = tf.placeholder("int32", [n])
             self._s2 = tf.placeholder("int32", [n])
             S = self.sim(self._s1, self._s2, tf_embs, n)
-            #S = tf.Print(S, [S], summarize=100)
 
             # Kernel hyperparameters are also placeholders.
             # The K function is responsible for tying the
@@ -129,7 +126,6 @@ class TFStringKernel(object):
             coef_grads = tf.gradients(result, self._coefs)
             all_stuff = [result] + gap_grads + match_grads + coef_grads
             self.result = all_stuff
-            self._init_op = tf.initialize_all_variables()
 
     def _dot(self, s1, s2, tf_embs, n):
         """
