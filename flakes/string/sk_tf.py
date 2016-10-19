@@ -125,13 +125,10 @@ class TFStringKernel(object):
         the similarity matrix between two vectors of embeddings. 
         This is just cosine similarity projected into the [0,1] interval.
         """
-        #s1 = tf.Print(s1, [s1], summarize=100)
-        #s2 = tf.Print(s2, [s2], summarize=100)
         tf_pi = tf.constant(np.pi, dtype=tf.float64)
         mat1 = tf.gather(tf_embs, s1)
         mat2 = tf.gather(tf_embs, s2)
         tf_norms = tf.constant(self.norms, dtype=tf.float64, name='norms')
-        #tf_norms = tf.Print(tf_norms, [tf_norms], summarize=100)
         norms1 = tf.gather(tf_norms, s1)
         norms2 = tf.gather(tf_norms, s2)
         dot = tf.matmul(mat1, tf.transpose(mat2))

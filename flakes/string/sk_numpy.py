@@ -115,16 +115,11 @@ class NumpyStringKernel(object):
         embs2 = self.embs[s2]
         normembs1 = self.norms[s1]
         normembs2 = self.norms[s2]
-        #print self.norms
         norms = np.dot(normembs1, normembs2.T)
-        #print s1
-        #print s2
-        #print norms
         dot = embs1.dot(embs2.T)
         # We clip values due to numerical errors
         # which put some values outside the arccosine range.
         cosine = np.clip(dot / norms, -1, 1)
-        #print cosine
         angle = np.arccos(cosine)
         return 1 - (angle / np.pi)
 
