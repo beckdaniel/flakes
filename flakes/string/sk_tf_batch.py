@@ -28,8 +28,6 @@ class TFBatchStringKernel(object):
             self.norms = np.sqrt(np.sum(pow(embs, 2), 1, keepdims=True))
         elif sim == 'dot':
             self.sim = self._dot
-        #self.norms = np.sqrt(np.sum(pow(embs, 2), 1, keepdims=True))
-        #self.norms[0] = 1.0 # avoid division by zero
         self.graph = None
         self.maxlen = 0
         self.device = device
@@ -46,14 +44,8 @@ class TFBatchStringKernel(object):
         if we update the maximum string length in our
         dataset.
         """
-        #if X2 == None:
-        #    X2 = X.copy()
         self.graph = tf.Graph()
         with self.graph.as_default(), tf.device(self.device):
-            # Datasets are loaded as constants. Useful for GPUs.
-            # Only feasible for small datasets though.
-            #tf_X = tf.constant(X, dtype=tf.int32, name='X')
-            #tf_X2 = tf.constant(X2, dtype=tf.int32, name='X2')
 
             # Embeddings are loaded as constants
             tf_embs = tf.constant(self.embs, dtype=tf.float64, name='embs')
@@ -65,8 +57,6 @@ class TFBatchStringKernel(object):
             self._gap = tf.placeholder("float64", [], name='gap_decay')
             self._match = tf.placeholder("float64", [], name='match_decay')
             self._coefs = tf.placeholder("float64", [1, order], name='coefs')
-            #self._indices1 = tf.placeholder("int32", [self.BATCH_SIZE], name='indices1')
-            #self._indices2 = tf.placeholder("int32", [self.BATCH_SIZE], name='indices2')
             self._slist1 = tf.placeholder("int32", [self.BATCH_SIZE, n], name='slist1')
             self._slist2 = tf.placeholder("int32", [self.BATCH_SIZE, n], name='slist2')
             
@@ -76,11 +66,9 @@ class TFBatchStringKernel(object):
             # Similarity matrix calculation. This is the only
             # place where the embeddings are used.
             S = self.sim(self._slist1, self._slist2, tf_embs)
-            #print S.get_shape()
 
             # Kp and gradient matrices initialisation
             Kp, dKp_dgap, dKp_dmatch = self._init_Kp(n)
-            #print Kp[0].get_shape()
 
             # Main kernel calculation happens here.
             # "i" correspond to the ngram order.
@@ -133,14 +121,8 @@ class TFBatchStringKernel(object):
         Simple dot product between two vectors of embeddings.
         This returns a matrix of positive real numbers.
         """
-        #inputlist1 = tf.gather(tf_X, self._indices1, name='inputlist1')
-        #inputlist2 = tf.gather(tf_X2, self._indices2, name='inputlist2')
-        #matlist1 = tf.gather(tf_embs, inputlist1, name='matlist1')
-        #matlist2 = tf.matrix_transpose(tf.gather(tf_embs, inputlist2, name='matlist2'))
         matlist1 = tf.gather(tf_embs, slist1, name='matlist1')
         matlist2 = tf.matrix_transpose(tf.gather(tf_embs, slist2, name='matlist2'))
-        #print slist1.get_shape()
-        #print matlist1.get_shape()
         return tf.batch_matmul(matlist1, matlist2)
 
     def _arccosine(self, tf_X, tf_X2, tf_embs):
@@ -264,7 +246,6 @@ class TFBatchStringKernel(object):
             # diagonals of the result matrices
             ktt = np.outer(np.diag(k_result) + self.variance,
                            np.diag(k_result) + self.variance)
-            #ktt = np.outer(np.diag(k_result), np.diag(k_result))
             sqrt_ktt = np.sqrt(ktt)
             
             norm_k_result = k_result / sqrt_ktt
@@ -321,8 +302,6 @@ class TFBatchStringKernel(object):
         first = grad / sqrt_ktt
         sec_num = (np.outer(np.diag(grad), np.diag(k_result) + self.variance) +
                    np.outer(np.diag(k_result) + self.variance, np.diag(grad)))
-        #sec_num = (np.outer(np.diag(grad), np.diag(k_result)) +
-        #           np.outer(np.diag(k_result), np.diag(grad)))
         second = norm_k_result * (sec_num / (2 * ktt))
         return first - second
 
@@ -440,7 +419,6 @@ class TFBatchStringKernel(object):
         Transform the return vectors from the graph into their
         original matrix form.
         """
-        #vector = np.squeeze(np.array(vector))
         vector = np.array(vector)
         if lenX2 == None:
             lenX2 = lenX
