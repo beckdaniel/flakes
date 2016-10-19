@@ -99,21 +99,15 @@ class TFStringKernel(object):
                                        tensor_array_name="ret_Kp")
 
             # Main loop, where Kp values are calculated.
-            i = tf.constant(0)
-            a = Kp.read(0)
-            acc_Kp = acc_Kp.write(0, a)
-            def _update_Kp(acc_Kp, a, S, i):
-                aux1 = tf.mul(S, a)
-                aux2 = tf.transpose(tf.matmul(aux1, D) * match_sq)
-                a = tf.transpose(tf.matmul(aux2, D))
-                i += 1
-                acc_Kp = acc_Kp.write(i, a)
-                return [acc_Kp, a, S, i]
-            cond = lambda _1, _2, _3, i: i < order
-            loop_vars = [acc_Kp, a, S, i]
-            final_Kp, _, _, _ = tf.while_loop(cond=cond, body=_update_Kp, 
-                                              loop_vars=loop_vars)
-            final_Kp = final_Kp.pack()
+            Kp = []
+            Kp.append(tf.ones(shape=(n, n), dtype="float64"))
+            for i in xrange(order - 1):
+                aux1 = S * Kp[i]
+                aux2 = tf.matmul(aux1, D)
+                Kpp = match_sq * aux2
+                Kp.append(tf.transpose(tf.matmul(tf.transpose(Kpp), D)))
+
+            final_Kp = tf.pack(Kp)
 
             # Final calculation. We gather all Kps and
             # multiply then by their coeficients.
