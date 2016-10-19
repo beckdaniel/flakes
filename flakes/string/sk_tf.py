@@ -166,8 +166,6 @@ class TFStringKernel(object):
         # We also start a TF session
         sess = tf.Session(graph=self.graph, config=self.tf_config)
 
-
-
         # Initialize return values
         k_result = np.zeros(shape=(len(X), len(X2)))
         gap_grads = np.zeros(shape=(len(X), len(X2)))

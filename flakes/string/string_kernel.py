@@ -3,7 +3,7 @@ import numpy as np
 from tensorflow.python.ops import control_flow_ops as cfops
 from tensorflow.python.ops import tensor_array_ops as taops
 from sk_tf import TFStringKernel
-from sk_tf_batch import TFBatchStringKernel
+from sk_tf_batch_preload import TFBatchPreloadStringKernel
 from sk_tf_batch_lazy import TFBatchLazyStringKernel
 from sk_numpy import NumpyStringKernel
 from sk_naive import NaiveStringKernel
@@ -61,8 +61,8 @@ class StringKernel(object):
         self.wrapper = wrapper
         if mode == 'tf':
             self._implementation = TFStringKernel(embs, sim, device, config)
-        elif mode == 'tf-batch':
-            self._implementation = TFBatchStringKernel(embs, device, batch_size, config)
+        elif mode == 'tf-batch-preload':
+            self._implementation = TFBatchPreloadStringKernel(embs, device, batch_size, config)
         elif mode == 'tf-batch-lazy':
             self._implementation = TFBatchLazyStringKernel(embs, sim, wrapper,
                                                            index, device, 
