@@ -433,32 +433,7 @@ class TFBatchStringKernel(object):
             gap_grads = np.array(gap_grads[:len(X)])
             match_grads = np.array(match_grads[:len(X)])
             coef_grads = np.array(coef_grads[:len(X)])
-        #print np.linalg.cholesky(k_results)
         return k_results, gap_grads, match_grads, coef_grads
-
-    def _code_and_pad(self, X, maxlen):
-        """
-        Transform string-based inputs in embeddings and pad them with zeros.
-        """
-        new_X = []
-        for x in X:
-            new_x = np.zeros(maxlen)
-            if (type(x[0]) == str or 
-                type(x[0]) == unicode or
-                type(x[0]) == np.string_):
-                coded_x = self._code(x[0])
-            else:
-                coded_x = x[0]
-            for i, index in enumerate(coded_x):
-                new_x[i] = index
-            new_X.append(new_x)
-        return np.array(new_X)
-
-    def _code(self, x):
-        new_x = []
-        for word in x:
-            new_x.append(self.index[word])
-        return new_x
 
     def _triangulate(self, vector, indices, lenX, lenX2=None):
         """
