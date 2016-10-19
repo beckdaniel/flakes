@@ -65,7 +65,7 @@ class StringKernelComparisonTests(unittest.TestCase):
         self.k_np_acos = flakes.string.StringKernel(mode='numpy', alphabet=alphabet, sim='arccosine')
         self.k_tf_acos = flakes.string.StringKernel(mode='tf',alphabet=alphabet, sim='arccosine')
         self.k_tf_preload = flakes.string.StringKernel(mode='tf-batch-preload', alphabet=alphabet)  
-        self.k_tf_lazy = flakes.string.StringKernel(mode='tf-batch-lazy', alphabet=alphabet, wrapper='none')
+        self.k_tf_batch = flakes.string.StringKernel(mode='tf-batch', alphabet=alphabet, wrapper='none')
 
     def test_compare_1(self):
         self.k_tf.order_coefs = [0.1, 0.2, 0.4, 0.5, 0.7]
@@ -160,14 +160,14 @@ class StringKernelComparisonTests(unittest.TestCase):
         self.assertAlmostEqual(np.sum(self.k_tf_acos.coef_grads)/1000, np.sum(self.k_np_acos.coef_grads)/1000, places=2)
 
     #@unittest.skip('')
-    def test_compare_preload_and_lazy(self):
+    def test_compare_preload_and_batch(self):
         #X = [[self.s1], [self.s2], [self.s3], [self.s4]]
         X = [[self.s1], [self.s2], [self.s3]]
         #X = [[self.s1], [self.s2]]
-        self.k_tf_lazy.order_coefs = [0.1, 0.2, 0.4, 0.5, 0.7]
-        self.k_tf_lazy.gap_decay = 0.8
-        self.k_tf_lazy.match_decay = 0.8
-        result1 = self.k_tf_lazy.K(X)
+        self.k_tf_batch.order_coefs = [0.1, 0.2, 0.4, 0.5, 0.7]
+        self.k_tf_batch.gap_decay = 0.8
+        self.k_tf_batch.match_decay = 0.8
+        result1 = self.k_tf_batch.K(X)
         self.k_tf_preload.order_coefs = [0.1, 0.2, 0.4, 0.5, 0.7]
         self.k_tf_preload.gap_decay = 0.8
         self.k_tf_preload.match_decay = 0.8
@@ -175,9 +175,9 @@ class StringKernelComparisonTests(unittest.TestCase):
         np.set_printoptions(suppress=True)
 
         self.assertAlmostEqual(np.sum(result1), np.sum(result2), places=2)
-        self.assertAlmostEqual(np.sum(self.k_tf_lazy.gap_grads)/1000, np.sum(self.k_tf_preload.gap_grads)/1000, places=2)
-        self.assertAlmostEqual(np.sum(self.k_tf_lazy.match_grads)/1000, np.sum(self.k_tf_preload.match_grads)/1000, places=2)
-        self.assertAlmostEqual(np.sum(self.k_tf_lazy.coef_grads)/1000, np.sum(self.k_tf_preload.coef_grads)/1000, places=2)
+        self.assertAlmostEqual(np.sum(self.k_tf_batch.gap_grads)/1000, np.sum(self.k_tf_preload.gap_grads)/1000, places=2)
+        self.assertAlmostEqual(np.sum(self.k_tf_batch.match_grads)/1000, np.sum(self.k_tf_preload.match_grads)/1000, places=2)
+        self.assertAlmostEqual(np.sum(self.k_tf_batch.coef_grads)/1000, np.sum(self.k_tf_preload.coef_grads)/1000, places=2)
 
 
 class StringKernelGradientTests(unittest.TestCase):
@@ -196,8 +196,8 @@ class StringKernelGradientTests(unittest.TestCase):
         self.k_np = flakes.string.StringKernel(mode='numpy', alphabet=alphabet, sim='dot')
         self.k_tf = flakes.string.StringKernel(mode='tf',alphabet=alphabet)
         self.k_tf_preload = flakes.string.StringKernel(mode='tf-batch-preload', alphabet=alphabet)  
-        self.k_tf_lazy = flakes.string.StringKernel(mode='tf-batch-lazy', alphabet=alphabet, wrapper='none')
-        self.k_tf_lazy_norm = flakes.string.StringKernel(mode='tf-batch-lazy', alphabet=alphabet, wrapper='norm')
+        self.k_tf_batch = flakes.string.StringKernel(mode='tf-batch', alphabet=alphabet, wrapper='none')
+        self.k_tf_batch_norm = flakes.string.StringKernel(mode='tf-batch', alphabet=alphabet, wrapper='norm')
 
     def test_gradient_gap_1(self):
         #self.k_tf.order_coefs = [0.1, 0.2, 0.4, 0.5, 0.7]
@@ -327,20 +327,20 @@ class StringKernelGradientTests(unittest.TestCase):
         g_result = (g_result1 - g_result2) / (2 * E)
         self.assertAlmostEqual(np.sum(true_grads)/100, np.sum(g_result)/100, places=2)
 
-    def test_gradient_lazy_norm_gap_1(self):
+    def test_gradient_batch_norm_gap_1(self):
         #self.k_tf.order_coefs = [0.1, 0.2, 0.4, 0.5, 0.7]
-        self.k_tf_lazy_norm.order_coefs = [1.0] * 2
-        self.k_tf_lazy_norm.gap_decay = 1.0
-        self.k_tf_lazy_norm.match_decay = 0.8
+        self.k_tf_batch_norm.order_coefs = [1.0] * 2
+        self.k_tf_batch_norm.gap_decay = 1.0
+        self.k_tf_batch_norm.match_decay = 0.8
         X = [[self.s1], [self.s2], [self.s3], [self.s4]]
-        result = self.k_tf_lazy_norm.K(X) 
-        true_grads = self.k_tf_lazy_norm.gap_grads
+        result = self.k_tf_batch_norm.K(X) 
+        true_grads = self.k_tf_batch_norm.gap_grads
 
         E = 1e-2
-        self.k_tf_lazy_norm.gap_decay = 1.0 + E
-        g_result1 = self.k_tf_lazy_norm.K(X)
-        self.k_tf_lazy_norm.gap_decay = 1.0 - E
-        g_result2 = self.k_tf_lazy_norm.K(X)
+        self.k_tf_batch_norm.gap_decay = 1.0 + E
+        g_result1 = self.k_tf_batch_norm.K(X)
+        self.k_tf_batch_norm.gap_decay = 1.0 - E
+        g_result2 = self.k_tf_batch_norm.K(X)
         g_result = (g_result1 - g_result2) / (2 * E)
 
         self.assertAlmostEqual(np.sum(true_grads), np.sum(g_result), places=2)

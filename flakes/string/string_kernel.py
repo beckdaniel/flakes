@@ -4,7 +4,7 @@ from tensorflow.python.ops import control_flow_ops as cfops
 from tensorflow.python.ops import tensor_array_ops as taops
 from sk_tf import TFStringKernel
 from sk_tf_batch_preload import TFBatchPreloadStringKernel
-from sk_tf_batch_lazy import TFBatchLazyStringKernel
+from sk_tf_batch import TFBatchStringKernel
 from sk_numpy import NumpyStringKernel
 from sk_naive import NaiveStringKernel
 from sk_util import build_one_hot
@@ -41,7 +41,7 @@ class StringKernel(object):
     """
 
     def __init__(self, gap_decay=1.0, match_decay=1.0,
-                 order_coefs=[1.0], variance=1.0, mode='tf-batch-lazy',
+                 order_coefs=[1.0], variance=1.0, mode='tf-batch',
                  sim='dot', wrapper='none',
                  embs=None, index=None, alphabet=None, device='/cpu:0',
                  batch_size=1000, config=None, trace=None):
@@ -63,10 +63,10 @@ class StringKernel(object):
             self._implementation = TFStringKernel(embs, sim, device, config)
         elif mode == 'tf-batch-preload':
             self._implementation = TFBatchPreloadStringKernel(embs, device, batch_size, config)
-        elif mode == 'tf-batch-lazy':
-            self._implementation = TFBatchLazyStringKernel(embs, sim, wrapper,
-                                                           index, device, 
-                                                           batch_size, config)
+        elif mode == 'tf-batch':
+            self._implementation = TFBatchStringKernel(embs, sim, wrapper,
+                                                       index, device, 
+                                                       batch_size, config)
         elif mode == 'numpy':
             self._implementation = NumpyStringKernel(embs=embs, sim=sim)
         elif mode == 'naive':
