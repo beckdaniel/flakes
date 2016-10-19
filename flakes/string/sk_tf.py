@@ -133,12 +133,14 @@ class TFStringKernel(object):
         norms2 = tf.gather(tf_norms, s2)
         dot = tf.matmul(mat1, tf.transpose(mat2))
         norms = tf.matmul(norms1, tf.transpose(norms2))
+        # We clip values due to numerical errors
+        # which put some values outside the arccosine range.
         cosine = tf.clip_by_value(dot / norms, -1, 1)
         angle = tf.acos(cosine)
         # The 0 vector has norm 0, which generates a NaN.
         # We catch these NaNs and replace them with pi,
         # which ends up returning 0 similarity.
-        angle = tf.select(tf.is_nan(angle), tf.ones_like(angle) * np.pi, angle)
+        angle = tf.select(tf.is_nan(angle), tf.ones_like(angle) * tf_pi, angle)
         return 1 - (angle / tf_pi)
 
     def K(self, X, X2, gram, params, diag=False):
