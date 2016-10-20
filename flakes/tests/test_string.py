@@ -3,6 +3,7 @@ import unittest
 import numpy as np
 import GPy
 import datetime
+from copy import deepcopy
 
 
 class StringKernelBasicTests(unittest.TestCase):
@@ -16,6 +17,7 @@ class StringKernelBasicTests(unittest.TestCase):
         self.k_slow = flakes.string.StringKernel(mode='naive', alphabet=alphabet)
         self.k_np = flakes.string.StringKernel(mode='numpy', alphabet=alphabet, sim='dot')
         self.k_tf = flakes.string.StringKernel(mode='tf',alphabet=alphabet)
+        self.k_tf_batch = flakes.string.StringKernel(mode='tf-batch',alphabet=alphabet)
         
     def test_sk_slow_1(self):
         self.k_slow.order_coefs = [1.] * 5
@@ -49,6 +51,61 @@ class StringKernelBasicTests(unittest.TestCase):
         expected = 5.943705
         result = self.k_tf.K(self.s1, self.s2)
         self.assertAlmostEqual(result, expected, places=4)
+
+    def test_sk_tf_batch_1(self):
+        self.k_tf.order_coefs = [1.] * 5
+        self.k_tf.gap_decay = 2.0
+        self.k_tf.match_decay = 2.0
+        expected = 504.0
+        result = self.k_tf.K(self.s1, self.s2)
+        self.assertAlmostEqual(result, expected)
+
+    def test_sk_tf_batch_2(self):
+        self.k_tf.order_coefs = [1.] * 5
+        self.k_tf.gap_decay = 0.8
+        self.k_tf.match_decay = 0.8
+        expected = 5.943705
+        result = self.k_tf.K(self.s1, self.s2)
+        self.assertAlmostEqual(result, expected, places=4)
+
+    def test_sk_numpy_gram_non_gram(self):
+        self.k_np.order_coefs = [1.] * 5
+        self.k_np.gap_decay = 2.0
+        self.k_np.match_decay = 2.0
+        X = [[self.s1], [self.s2], [self.s3], [self.s4]]
+        X2 = deepcopy(X)
+        result1 = self.k_np.K(X)
+        result2 = self.k_np.K(X, X2)
+        self.assertAlmostEqual(np.sum(result1)/1000, np.sum(result2)/1000)
+
+    def test_sk_tf_gram_non_gram(self):
+        self.k_tf.order_coefs = [1.] * 5
+        self.k_tf.gap_decay = 2.0
+        self.k_tf.match_decay = 2.0
+        X = [[self.s1], [self.s2], [self.s3], [self.s4]]
+        X2 = deepcopy(X)
+        result1 = self.k_tf.K(X)
+        result2 = self.k_tf.K(X, X2)
+        self.assertAlmostEqual(np.sum(result1)/1000, np.sum(result2)/1000)
+
+    def test_sk_tf_batch_gram_non_gram(self):
+        self.k_tf_batch.order_coefs = [1.] * 5
+        self.k_tf_batch.gap_decay = 2.0
+        self.k_tf_batch.match_decay = 2.0
+        X = [[self.s1], [self.s2], [self.s3], [self.s4]]
+        X2 = deepcopy(X)
+        result1 = self.k_tf_batch.K(X)
+        result2 = self.k_tf_batch.K(X, X2)
+        self.assertAlmostEqual(np.sum(result1)/1000, np.sum(result2)/1000)
+
+    def test_sk_numpy_diag_non_diag(self):
+        self.k_np.order_coefs = [1.] * 5
+        self.k_np.gap_decay = 2.0
+        self.k_np.match_decay = 2.0
+        X = [[self.s1], [self.s2], [self.s3], [self.s4]]
+        result1 = np.diag(self.k_np.K(X))
+        result2 = self.k_np.K(X, diag=True)
+        self.assertAlmostEqual(np.sum(result1)/1000, np.sum(result2)/1000)
 
 
 class StringKernelComparisonTests(unittest.TestCase):

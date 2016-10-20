@@ -54,6 +54,8 @@ class StringKernel(object):
         # we assume hard match between symbols.
         if embs is None:
             embs, self.index = build_one_hot(alphabet)
+        else:
+            self.index = index
         self.gap_decay = gap_decay
         self.match_decay = match_decay
         self.variance = variance
