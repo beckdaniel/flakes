@@ -93,7 +93,7 @@ class StringKernel(object):
         """
         # Symmetry check to ensure that we only calculate
         # the lower diagonal.
-        if X2 is None:
+        if X2 is None and not diag:
             X2 = X
             gram = True
         else:
@@ -109,11 +109,15 @@ class StringKernel(object):
 
         # Now we turn our inputs into lists of integers using the
         # index
-        X = [[encode_string(x[0], self.index)] for x in X]
-        X2 = [[encode_string(x2[0], self.index)] for x2 in X2]
+        if self.index is not None:
+            # If index is none we assume inputs are already
+            # encoded in integer lists.
+            X = [[encode_string(x[0], self.index)] for x in X]
+            X2 = [[encode_string(x2[0], self.index)] for x2 in X2]
+        #print self.index
 
         params = self._get_params()
-        result = self._implementation.K(X, X2, gram, params, diag=diag)
+        result = self._implementation.K(X, X2, gram=gram, params=params, diag=diag)
         k_result = result[0]
 
         self.gap_grads = result[1]

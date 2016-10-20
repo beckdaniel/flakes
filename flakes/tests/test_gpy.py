@@ -34,7 +34,7 @@ class GPyStringKernelTests(unittest.TestCase):
         print sk_result
         print np.dot(self.s1_bow, self.s2_bow)
 
-    @unittest.skip('')
+    #@unittest.skip('')
     def test_linear_vs_sk_gpy(self):
         #self.k_tf_batch.order_coefs = np.array([1.])
         self.k_tf_batch.gap_decay = 1.0
@@ -60,6 +60,8 @@ class GPyStringKernelTests(unittest.TestCase):
         m2['.*noise.*'].constrain_fixed(1e-4)
         m2.optimize(messages=True)
         print m2
+        print m1.predict(X1)
+        print m2.predict(X2)
 
     @unittest.skip('')
     def test_linear_vs_sk_gpy_2(self):
@@ -231,7 +233,7 @@ class GPyStringKernelTests(unittest.TestCase):
         #print m1.kern._get_params()
 
 
-    #@unittest.skip('')
+    @unittest.skip('')
     def test_linear_vs_sk_autograd_gpy_3(self):
         #self.k_tf_batch.order_coefs = np.array([1.])
         self.k_tf.gap_decay = 1.0
@@ -274,6 +276,8 @@ class GPyStringKernelTests(unittest.TestCase):
         #print m2['.*variances.*'].gradient
         print m1.checkgrad(verbose=True)
         print m2.checkgrad(verbose=True)
+        print m1.predict(X1)
+        print m2.predict(X2)
 
 if __name__ == "__main__":
     unittest.main()
