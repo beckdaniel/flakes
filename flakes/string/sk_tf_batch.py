@@ -125,21 +125,21 @@ class TFBatchStringKernel(object):
         matlist2 = tf.matrix_transpose(tf.gather(tf_embs, slist2, name='matlist2'))
         return tf.batch_matmul(matlist1, matlist2)
 
-    def _arccosine(self, tf_X, tf_X2, tf_embs):
+    def _arccosine(self, slist1, slist2, tf_embs):
         """
         Uses an arccosine kernel of degree 0 to calculate
         the similarity matrix between two vectors of embeddings. 
         This is just cosine similarity projected into the [0,1] interval.
         """
-        dot = self._dot(tf_X, tf_X2, tf_embs)
+        dot = self._dot(slist1, slist2, tf_embs)
         # This calculation corresponds to an arc-cosine with 
         # degree 0. It can be interpreted as cosine
         # similarity but projected into a [0,1] interval.
         # TODO: arc-cosine with degree 1.
         tf_pi = tf.constant(np.pi, dtype=tf.float64)
         tf_norms = tf.constant(self.norms, dtype=tf.float64, name='norms')
-        normlist1 = tf.gather(tf_norms, inputlist1, name='normlist1')
-        normlist2 = tf.matrix_transpose(tf.gather(tf_norms, inputlist2, name='normlist2'))
+        normlist1 = tf.gather(tf_norms, slist1, name='normlist1')
+        normlist2 = tf.matrix_transpose(tf.gather(tf_norms, slist2, name='normlist2'))
         norms = tf.batch_matmul(normlist1, normlist2)
         cosine = tf.clip_by_value(tf.truediv(dot, norms), -1, 1)
         angle = tf.acos(cosine)

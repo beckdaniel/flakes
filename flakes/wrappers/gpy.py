@@ -10,7 +10,7 @@ class GPyStringKernel(StringKernel, Kern):
     """
     def __init__(self, gap_decay=1.0, match_decay=1.0,
                  order_coefs=[1.0], variance=1.0, 
-                 mode='tf-batch-lazy',
+                 mode='tf-batch',
                  sim='dot', wrapper='none',
                  active_dims=None, name='string',
                  embs=None, alphabet=None,
