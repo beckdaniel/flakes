@@ -166,25 +166,38 @@ class TFStringKernel(object):
         # We also start a TF session
         sess = tf.Session(graph=self.graph, config=self.tf_config)
 
-        # Initialize return values
-        k_result = np.zeros(shape=(len(X), len(X2)))
-        gap_grads = np.zeros(shape=(len(X), len(X2)))
-        match_grads = np.zeros(shape=(len(X), len(X2)))
-        coef_grads = np.zeros(shape=(len(X), len(X2), order))
+        if diag:
+            # Assume only X is given
+            k_result = np.zeros(shape=(len(X)))
+            gap_grads = np.zeros(shape=(len(X)))
+            match_grads = np.zeros(shape=(len(X)))
+            coef_grads = np.zeros(shape=(len(X), order))
+            for i, x1 in enumerate(X):
+                result = self._k(x1[0], x1[0], params, sess)
+                k_result[i] = result[0]
+                gap_grads[i] = result[1]
+                match_grads[i] = result[2]
+                coef_grads[i] = np.array(result[3:])
+        else:
+            # Initialize return values
+            k_result = np.zeros(shape=(len(X), len(X2)))
+            gap_grads = np.zeros(shape=(len(X), len(X2)))
+            match_grads = np.zeros(shape=(len(X), len(X2)))
+            coef_grads = np.zeros(shape=(len(X), len(X2), order))
 
-        # All set up. Proceed with Gram matrix calculation.
-        for i, x1 in enumerate(X):
-            for j, x2 in enumerate(X2):
-                if gram and (j < i):
-                    k_result[i, j] = k_result[j, i]
-                    gap_grads[i, j] = gap_grads[j, i]
-                    match_grads[i, j] = match_grads[j, i]
-                    coef_grads[i, j] = coef_grads[j, i]
-                else:
-                    result = self._k(x1[0], x2[0], params, sess)
-                    k_result[i, j] = result[0]
-                    gap_grads[i, j] = result[1]
-                    match_grads[i, j] = result[2]
-                    coef_grads[i, j] = np.array(result[3:])
+            # All set up. Proceed with Gram matrix calculation.
+            for i, x1 in enumerate(X):
+                for j, x2 in enumerate(X2):
+                    if gram and (j < i):
+                        k_result[i, j] = k_result[j, i]
+                        gap_grads[i, j] = gap_grads[j, i]
+                        match_grads[i, j] = match_grads[j, i]
+                        coef_grads[i, j] = coef_grads[j, i]
+                    else:
+                        result = self._k(x1[0], x2[0], params, sess)
+                        k_result[i, j] = result[0]
+                        gap_grads[i, j] = result[1]
+                        match_grads[i, j] = result[2]
+                        coef_grads[i, j] = np.array(result[3:])
         sess.close()
         return k_result, gap_grads, match_grads, coef_grads

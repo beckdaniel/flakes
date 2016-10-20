@@ -107,6 +107,24 @@ class StringKernelBasicTests(unittest.TestCase):
         result2 = self.k_np.K(X, diag=True)
         self.assertAlmostEqual(np.sum(result1)/1000, np.sum(result2)/1000)
 
+    def test_sk_tf_diag_non_diag(self):
+        self.k_tf.order_coefs = [1.] * 5
+        self.k_tf.gap_decay = 2.0
+        self.k_tf.match_decay = 2.0
+        X = [[self.s1], [self.s2], [self.s3], [self.s4]]
+        result1 = np.diag(self.k_tf.K(X))
+        result2 = self.k_tf.K(X, diag=True)
+        self.assertAlmostEqual(np.sum(result1)/1000, np.sum(result2)/1000)
+
+    def test_sk_tf_batch_diag_non_diag(self):
+        self.k_tf_batch.order_coefs = [1.] * 5
+        self.k_tf_batch.gap_decay = 2.0
+        self.k_tf_batch.match_decay = 2.0
+        X = [[self.s1], [self.s2], [self.s3], [self.s4]]
+        result1 = np.diag(self.k_tf_batch.K(X))
+        result2 = self.k_tf_batch.K(X, diag=True)
+        self.assertAlmostEqual(np.sum(result1)/1000, np.sum(result2)/1000)
+
 
 class StringKernelComparisonTests(unittest.TestCase):
 

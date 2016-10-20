@@ -316,7 +316,7 @@ class TFBatchStringKernel(object):
         # If we are calculating the gram matrix we 
         # enter gram mode. In gram mode we skip
         # graph rebuilding.
-        if gram:
+        if gram and not diag:
             if not self.gram_mode:
                 maxlen = max([len(x[0]) for x in X])
                 self.maxlen = maxlen
@@ -330,6 +330,7 @@ class TFBatchStringKernel(object):
             if diag:
                 maxlen = max([len(x[0]) for x in X])
                 X = [self._pad(x[0], maxlen) for x in X]
+                X2 = X
                 self.maxlen = maxlen
                 self._build_graph(maxlen, order, X)
                 indices = [[i1, i1] for i1 in range(len(X))]
