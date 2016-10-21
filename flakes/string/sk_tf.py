@@ -152,7 +152,11 @@ class TFStringKernel(object):
 
         # We have to build a new graph if 1) there is no graph or
         # 2) current graph maxlen is not large enough for these inputs
-        maxlen = max([len(x[0]) for x in list(X) + list(X2)])
+        if diag or gram:
+            maxlen = max([len(x[0]) for x in X])
+        else:
+            maxlen = max([len(x[0]) for x in list(X) + list(X2)])
+
         if self.graph is None:
             #sys.stderr.write("No graph found. Building one.\n")
             self._build_graph(maxlen, order)

@@ -113,7 +113,8 @@ class StringKernel(object):
             # If index is none we assume inputs are already
             # encoded in integer lists.
             X = [[encode_string(x[0], self.index)] for x in X]
-            X2 = [[encode_string(x2[0], self.index)] for x2 in X2]
+            if not diag:
+                X2 = [[encode_string(x2[0], self.index)] for x2 in X2]
         #print self.index
 
         params = self._get_params()
