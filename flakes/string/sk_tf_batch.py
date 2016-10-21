@@ -36,6 +36,7 @@ class TFBatchStringKernel(object):
         self.tf_config = config
         self.BATCH_SIZE = batch_size
         self.normalise = normalise
+        self.sess = None
 
     def _build_graph(self, n, order, X, X2=None):
         """
@@ -305,6 +306,7 @@ class TFBatchStringKernel(object):
         second = norm_k_result * (sec_num / (2 * ktt))
         return first - second
 
+    #@profile
     def _K_unnorm(self, X, X2, gram, params, diag=False):
         """
         Calculate the unnormalized kernel value.
@@ -322,6 +324,9 @@ class TFBatchStringKernel(object):
                 self.maxlen = maxlen
                 self.gram_mode = True
                 self._build_graph(maxlen, order, X)
+                if self.sess is not None:
+                    self.sess.close()
+                    self.sess = None
             X = [self._pad(x[0], self.maxlen) for x in X]
             X2 = X
             indices = [[i1, i2] for i1 in range(len(X)) for i2 in range(len(X2)) if i1 >= i2]
@@ -341,6 +346,9 @@ class TFBatchStringKernel(object):
                 self.maxlen = maxlen
                 self._build_graph(maxlen, order, X, X2)
                 indices = [[i1, i2] for i1 in range(len(X)) for i2 in range(len(X2))]
+            if self.sess is not None:
+                self.sess.close()
+                self.sess = None
 
         # Initialize return values
         k_results = [] 
@@ -358,7 +366,8 @@ class TFBatchStringKernel(object):
             run_metadata = None
 
         # We start a TF session and run it
-        sess = tf.Session(graph=self.graph, config=self.tf_config)
+        if self.sess is None:
+            self.sess = tf.Session(graph=self.graph, config=self.tf_config)
 
         indices_copy = copy.deepcopy(indices)
 
@@ -380,9 +389,9 @@ class TFBatchStringKernel(object):
                          self._slist2: slist2
                      }
             before = datetime.datetime.now()
-            result = sess.run(self.result, feed_dict=feed_dict,
-                              options=run_options, 
-                              run_metadata=run_metadata)
+            result = self.sess.run(self.result, feed_dict=feed_dict,
+                                   options=run_options, 
+                                   run_metadata=run_metadata)
             after = datetime.datetime.now()
             k, gapg, matchg, coefsg = result
             if self.trace is not None:
@@ -396,7 +405,7 @@ class TFBatchStringKernel(object):
                 match_grads.append(matchg[i])
                 coef_grads.append(coefsg[:, i])
             indices = indices[self.BATCH_SIZE:]
-        sess.close()
+        #sess.close()
         
         # Reshape the return values since they are vectors:
         if not diag:
