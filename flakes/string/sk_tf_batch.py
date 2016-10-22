@@ -369,13 +369,9 @@ class TFBatchStringKernel(object):
         if self.sess is None:
             self.sess = tf.Session(graph=self.graph, config=self.tf_config)
 
-        #indices_copy = copy.deepcopy(indices)
-        indices_copy = indices
         batches = (len(indices) / self.BATCH_SIZE) + 1
 
-        #while indices != []:
         for i in xrange(batches):
-            #items = indices[:self.BATCH_SIZE]
             items = indices[i * self.BATCH_SIZE: (i+1) * self.BATCH_SIZE]
             slist1 = [X[i[0]] for i in items]
             slist2 = [X2[i[1]] for i in items]
@@ -408,8 +404,6 @@ class TFBatchStringKernel(object):
                 gap_grads.append(gapg[i])
                 match_grads.append(matchg[i])
                 coef_grads.append(coefsg[:, i])
-            #indices = indices[self.BATCH_SIZE:]
-        #sess.close()
         
         # Reshape the return values since they are vectors:
         if not diag:
@@ -417,10 +411,10 @@ class TFBatchStringKernel(object):
                 lenX2 = None
             else:
                 lenX2 = len(X2)
-            k_results = self._triangulate(k_results, indices_copy, len(X), lenX2)
-            gap_grads = self._triangulate(gap_grads, indices_copy, len(X), lenX2)
-            match_grads = self._triangulate(match_grads, indices_copy, len(X), lenX2)
-            coef_grads = self._triangulate(coef_grads, indices_copy, len(X), lenX2)
+            k_results = self._triangulate(k_results, indices, len(X), lenX2)
+            gap_grads = self._triangulate(gap_grads, indices, len(X), lenX2)
+            match_grads = self._triangulate(match_grads, indices, len(X), lenX2)
+            coef_grads = self._triangulate(coef_grads, indices, len(X), lenX2)
         else:
             k_results = np.array(k_results[:len(X)])
             gap_grads = np.array(gap_grads[:len(X)])
