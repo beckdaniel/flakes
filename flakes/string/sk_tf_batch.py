@@ -325,20 +325,21 @@ class TFBatchStringKernel(object):
                 self.gram_mode = True
             else:
                 maxlen = self.maxlen
-            X = [self._pad(x[0], maxlen) for x in X]
-            X2 = X
-            indices = [[i1, i2] for i1 in range(len(X)) for i2 in range(len(X2)) if i1 >= i2]
+            #X = [self._pad(x[0], maxlen) for x in X]
+            #X2 = X
+            #indices = [[i1, i2] for i1 in range(len(X)) for i2 in range(len(X2)) if i1 >= i2]
+            indices = [[i1, i2] for i1 in range(len(X)) for i2 in range(len(X)) if i1 >= i2]
         else:
             self.gram_mode = False
             if diag:
                 maxlen = max([len(x[0]) for x in X])
-                X = [self._pad(x[0], maxlen) for x in X]
-                X2 = X
+                #X = [self._pad(x[0], maxlen) for x in X]
+                #X2 = X
                 indices = [[i1, i1] for i1 in range(len(X))]
             else:
                 maxlen = max([len(x[0]) for x in list(X) + list(X2)])
-                X = [self._pad(x[0], maxlen) for x in X]
-                X2 = [self._pad(x[0], maxlen) for x in X2]
+                #X = [self._pad(x[0], maxlen) for x in X]
+                #X2 = [self._pad(x[0], maxlen) for x in X2]
                 indices = [[i1, i2] for i1 in range(len(X)) for i2 in range(len(X2))]
 
         # We have to rebuild the graph if we have new inputs
@@ -351,11 +352,21 @@ class TFBatchStringKernel(object):
                 self.sess.close()
                 self.sess = None
 
+        X = [self._pad(x[0], self.maxlen) for x in X]
+        if gram or diag:
+            X2 = X
+        else:
+            X2 = [self._pad(x[0], self.maxlen) for x in X2]
+
         # Initialize return values
-        k_results = [] 
-        gap_grads = []
-        match_grads = []
-        coef_grads = []
+        #k_results = [] 
+        #gap_grads = []
+        #match_grads = []
+        #coef_grads = []
+        k_results = np.zeros((len(X), len(X2)))
+        gap_grads = np.zeros((len(X), len(X2)))
+        match_grads = np.zeros((len(X), len(X2)))
+        coef_grads = np.zeros((len(X), len(X2), order))
 
         # Add optional tracing for profiling
         if self.trace is not None:
@@ -400,28 +411,84 @@ class TFBatchStringKernel(object):
                 trace = tl.generate_chrome_trace_format()
                 with open(self.trace, 'w') as f:
                     f.write(trace)
-            for i in xrange(self.BATCH_SIZE):
-                k_results.append(k[i])
-                gap_grads.append(gapg[i])
-                match_grads.append(matchg[i])
-                coef_grads.append(coefsg[:, i])
+            #for j in xrange(self.BATCH_SIZE):
+
+            # Populate the return matrices:
+            for j, item in enumerate(items):
+                k_results[item[0], item[1]] = k[j]
+                gap_grads[item[0], item[1]] = gapg[j]
+                match_grads[item[0], item[1]] = matchg[j]
+                coef_grads[item[0], item[1]] = coefsg[:, j]
+                #k_results.append(k[j])
+                #gap_grads.append(gapg[j])
+                #match_grads.append(matchg[j])
+                #coef_grads.append(coefsg[:, j])
         
+        if gram:
+            # symmetrize
+            new_coef_grads = np.zeros((len(X), len(X), order))
+            for i in xrange(order):
+                new_coef_grads[:, :, i] = self._symmetrize(coef_grads[:, :, i])
+            return (self._symmetrize(k_results), self._symmetrize(gap_grads),
+                    self._symmetrize(match_grads), new_coef_grads)
+        elif diag:
+            new_coef_grads = np.zeros((len(X), order))
+            for i in xrange(order):
+                new_coef_grads[:, i] = np.diag(coef_grads[:, :, i])
+            return (np.diag(k_results), np.diag(gap_grads),
+                    np.diag(match_grads), new_coef_grads)
+        else:
+            return k_results, gap_grads, match_grads, coef_grads
+
+
         # Reshape the return values since they are vectors:
+        k_results = self._reshape_result(k_results, len(indices), len(X), len(X2), gram, diag)
+        gap_grads = self._reshape_result(gap_grads, len(indices), len(X), len(X2), gram, diag)
+        match_grads = self._reshape_result(match_grads, len(indices), len(X), len(X2), gram, diag)
+        for i in xrange(order):
+            coef_grads[:, :, i] = self._reshape_result(coef_grads[:, :, i], len(indices), len(X), len(X2), gram, diag)
+
+        return k_results, gap_grads, match_grads, coef_grads
+        
+
+
         if not diag:
             if gram:
                 lenX2 = None
             else:
                 lenX2 = len(X2)
-            k_results = self._triangulate(k_results, indices, len(X), lenX2)
-            gap_grads = self._triangulate(gap_grads, indices, len(X), lenX2)
-            match_grads = self._triangulate(match_grads, indices, len(X), lenX2)
-            coef_grads = self._triangulate(coef_grads, indices, len(X), lenX2)
+            k_results = self._triangulate(k_results, len(indices), len(X), lenX2)
+            gap_grads = self._triangulate(gap_grads, len(indices), len(X), lenX2)
+            match_grads = self._triangulate(match_grads, len(indices), len(X), lenX2)
+            coef_grads = self._triangulate(coef_grads, len(indices), len(X), lenX2)
         else:
             k_results = np.array(k_results[:len(X)])
             gap_grads = np.array(gap_grads[:len(X)])
             match_grads = np.array(match_grads[:len(X)])
             coef_grads = np.array(coef_grads[:len(X)])
         return k_results, gap_grads, match_grads, coef_grads
+
+    def _symmetrize(self, matrix):
+        return matrix + matrix.T - np.diag(np.diag(matrix))
+
+    def _reshape_result(self, result, indlen, lenX, lenX2, gram, diag):
+        """
+        Transform the result vectors from the graph into their
+        original matrix form. Notice that we assume the result
+        vector is in the proper format, which is derived from
+        the indices vector in the K_unnorm method.
+        """
+        # We might have padded results that need pruning.
+        #result = result[:indlen]
+        if gram:
+            tril = np.zeros((lenX, lenX))
+            tril[np.tril_indices(lenX, 0)] = result
+            # symmetrization
+            return tril + tril.T - np.diag(np.diag(tril))
+        elif diag:
+            return np.array(result)
+        else:
+            return np.reshape(result, (lenX, lenX2))
 
     def _triangulate(self, vector, indices, lenX, lenX2=None):
         """
