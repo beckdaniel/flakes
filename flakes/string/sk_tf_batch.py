@@ -38,7 +38,7 @@ class TFBatchStringKernel(object):
         self.normalise = normalise
         self.sess = None
 
-    def _build_graph(self, n, order, X, X2=None):
+    def _build_graph(self, n, order):
         """
         Builds the graph for TF calculation. This should
         be usually called only once but can be called again
@@ -311,6 +311,8 @@ class TFBatchStringKernel(object):
         """
         Calculate the unnormalized kernel value.
         """
+        assert not (gram and diag), "gram and diag cannot be true at the same time."
+
         # We need a better way to name this...
         # params[2] should be always order_coefs
         order = len(params[2])
@@ -318,12 +320,12 @@ class TFBatchStringKernel(object):
         # If we are calculating the gram matrix we 
         # enter gram mode. In gram mode we skip
         # graph rebuilding.
-        if gram and not diag:
+        if gram:
             if not self.gram_mode:
                 maxlen = max([len(x[0]) for x in X])
                 self.maxlen = maxlen
                 self.gram_mode = True
-                self._build_graph(maxlen, order, X)
+                self._build_graph(maxlen, order)
                 if self.sess is not None:
                     self.sess.close()
                     self.sess = None
@@ -336,16 +338,14 @@ class TFBatchStringKernel(object):
                 maxlen = max([len(x[0]) for x in X])
                 X = [self._pad(x[0], maxlen) for x in X]
                 X2 = X
-                self.maxlen = maxlen
-                self._build_graph(maxlen, order, X)
                 indices = [[i1, i1] for i1 in range(len(X))]
             else:
                 maxlen = max([len(x[0]) for x in list(X) + list(X2)])
                 X = [self._pad(x[0], maxlen) for x in X]
                 X2 = [self._pad(x[0], maxlen) for x in X2]
-                self.maxlen = maxlen
-                self._build_graph(maxlen, order, X, X2)
                 indices = [[i1, i2] for i1 in range(len(X)) for i2 in range(len(X2))]
+            self.maxlen = maxlen
+            self._build_graph(maxlen, order)
             if self.sess is not None:
                 self.sess.close()
                 self.sess = None
