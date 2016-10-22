@@ -317,22 +317,18 @@ class TFBatchStringKernel(object):
         # params[2] should be always order_coefs
         order = len(params[2])
 
-        # If we are calculating the gram matrix we 
-        # enter gram mode. In gram mode we skip
-        # graph rebuilding.
+        # We check input lengths and pad them with zeros.
+        # At Gram matrix time, we skip checking the length.
         if gram:
             if not self.gram_mode:
                 maxlen = max([len(x[0]) for x in X])
-                self.maxlen = maxlen
                 self.gram_mode = True
-                self._build_graph(maxlen, order)
-                if self.sess is not None:
-                    self.sess.close()
-                    self.sess = None
-            X = [self._pad(x[0], self.maxlen) for x in X]
+            else:
+                maxlen = self.maxlen
+            X = [self._pad(x[0], maxlen) for x in X]
             X2 = X
             indices = [[i1, i2] for i1 in range(len(X)) for i2 in range(len(X2)) if i1 >= i2]
-        else: # We rebuild the graph, usually for predictions
+        else:
             self.gram_mode = False
             if diag:
                 maxlen = max([len(x[0]) for x in X])
@@ -344,6 +340,11 @@ class TFBatchStringKernel(object):
                 X = [self._pad(x[0], maxlen) for x in X]
                 X2 = [self._pad(x[0], maxlen) for x in X2]
                 indices = [[i1, i2] for i1 in range(len(X)) for i2 in range(len(X2))]
+
+        # We have to rebuild the graph if we have new inputs
+        # which are larger than the graph capacity.
+        # This is usually only called at prediction time.
+        if maxlen > self.maxlen:
             self.maxlen = maxlen
             self._build_graph(maxlen, order)
             if self.sess is not None:
