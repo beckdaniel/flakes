@@ -2,6 +2,7 @@ import flakes
 import unittest
 import numpy as np
 import GPy
+from paramz import ObsAr
 
 
 class GPyStringKernelTests(unittest.TestCase):
@@ -24,7 +25,9 @@ class GPyStringKernelTests(unittest.TestCase):
         self.k_tf2 = flakes.wrappers.gpy.GPyStringKernel(mode='tf-batch', alphabet=alphabet, order_coefs=[1.0, 1.0])
         self.k_tf_batch = flakes.wrappers.gpy.GPyStringKernel(mode='tf-batch', alphabet=alphabet, order_coefs=[1.0], wrapper='none')
         self.k_tf_batch2 = flakes.wrappers.gpy.GPyStringKernel(mode='tf-batch', alphabet=alphabet, order_coefs=[1.0, 1.0], sim='arccosine', wrapper='arccos0')
+        self.k_tf_rbf = flakes.wrappers.gpy.RBFStringKernel(mode='tf-batch', alphabet=alphabet)
         
+    @unittest.skip('')
     def test_linear_vs_sk(self):
         self.k_tf_batch.order_coefs = [1.]
         self.k_tf_batch.gap_decay = 1.0
@@ -34,7 +37,59 @@ class GPyStringKernelTests(unittest.TestCase):
         print sk_result
         print np.dot(self.s1_bow, self.s2_bow)
 
-    #@unittest.skip('')
+    @unittest.skip('')
+    def test_caching(self):
+        self.k_tf_batch.order_coefs = [1.] * 5
+        self.k_tf_batch.gap_decay = 1.0
+        self.k_tf_batch.match_decay = 1.0
+        X = np.array([[self.s1], [self.s2], [self.s3], [self.s4]])
+        # To allow caching
+        X = ObsAr(X)
+
+        print "REPETITION"
+        sk_result = self.k_tf_batch.K(X)
+        sk_result = self.k_tf_batch.K(X)
+        sk_result = self.k_tf_batch.K(X)
+        sk_result = self.k_tf_batch.K(X)
+        sk_result = self.k_tf_batch.K(X)
+        sk_result = self.k_tf_batch.K(X)
+        print "REPETITION END"
+        print sk_result
+        print np.dot(self.s1_bow, self.s2_bow)
+
+    def test_rbf(self):
+        self.k_tf_rbf.order_coefs = [1.] * 5
+        self.k_tf_rbf.gap_decay = 0.1
+        self.k_tf_rbf.match_decay = 0.1
+        X = np.array([[self.s1], [self.s2], [self.s3], [self.s4]])
+        # To allow caching
+        X = ObsAr(X)
+
+        print "REPETITION"
+        sk_result = self.k_tf_rbf.K(X)
+        sk_result = self.k_tf_rbf.K(X)
+        sk_result = self.k_tf_rbf.K(X)
+        sk_result = self.k_tf_rbf.K(X)
+        sk_result = self.k_tf_rbf.K(X)
+        sk_result = self.k_tf_rbf.K(X)
+        print "REPETITION END"
+        print sk_result
+
+    def test_rbf_inside_gp_regression(self):
+        #self.k_tf_rbf.order_coefs = [1.] * 5
+        self.k_tf_rbf.gap_decay = 0.1
+        self.k_tf_rbf.match_decay = 0.1
+        X = np.array([[self.s1], [self.s2], [self.s3], [self.s4]])
+        Y = np.array([[3.0], [5.0], [8.0], [14.0]])
+        m = GPy.models.GPRegression(X, Y, kernel=self.k_tf_rbf)
+        print m
+        print m.checkgrad(verbose=True)
+        m.optimize(messages=True)
+        print m
+        print m.checkgrad(verbose=True)
+        
+
+    @unittest.skip('')
     def test_linear_vs_sk_gpy(self):
         #self.k_tf_batch.order_coefs = np.array([1.])
         self.k_tf_batch.gap_decay = 1.0
