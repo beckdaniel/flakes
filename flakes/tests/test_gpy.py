@@ -25,7 +25,7 @@ class GPyStringKernelTests(unittest.TestCase):
         self.k_tf2 = flakes.wrappers.gpy.GPyStringKernel(mode='tf-batch', alphabet=alphabet, order_coefs=[1.0, 1.0])
         self.k_tf_batch = flakes.wrappers.gpy.GPyStringKernel(mode='tf-batch', alphabet=alphabet, order_coefs=[1.0], wrapper='none')
         self.k_tf_batch2 = flakes.wrappers.gpy.GPyStringKernel(mode='tf-batch', alphabet=alphabet, order_coefs=[1.0, 1.0], sim='arccosine', wrapper='arccos0')
-        self.k_tf_rbf = flakes.wrappers.gpy.RBFStringKernel(mode='tf-batch', alphabet=alphabet)
+        self.k_tf_rbf = flakes.wrappers.gpy.RBFStringKernel(mode='tf-batch', alphabet=alphabet, order_coefs=[1.0]*5)
         
     @unittest.skip('')
     def test_linear_vs_sk(self):
