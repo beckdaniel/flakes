@@ -121,7 +121,6 @@ class RBFStringKernel(StringKernel, GPy.kern.RBF):
 
     @Cache_this(limit=3, ignore_args=())
     def _string_K(self, X, X2=None):
-        #print "NOT CACHED"
         result = StringKernel.K(self, X, X2)
         gap_grads = self.gap_grads
         match_grads = self.match_grads
@@ -174,10 +173,8 @@ class RBFStringKernel(StringKernel, GPy.kern.RBF):
         return GPy.kern.RBF.K(self, X, X2)
 
     def update_gradients_full(self, dL_dK, X, X2=None):
-        #if X2 is None: 
-        #    dL_dK = (dL_dK + dL_dK.T) / 2
-
         self.variance.gradient = np.sum(self.K(X, X2) * dL_dK) / self.variance
+        #self.variance.gradient = np.sum(self.K(X, X2) * dL_dK)
         r, dr_dgap, dr_dmatch, dr_dcoefs = self._scaled_dist_and_grads(X, X2)
 
         dterm = -self.K(X, X2) * r

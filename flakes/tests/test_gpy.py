@@ -84,6 +84,8 @@ class GPyStringKernelTests(unittest.TestCase):
         m = GPy.models.GPRegression(X, Y, kernel=self.k_tf_rbf)
         print m
         print m.checkgrad(verbose=True)
+        m['rbf_string.variance'] = 10.0
+        print m.checkgrad(verbose=True)
         m.optimize(messages=True)
         print m
         print m.checkgrad(verbose=True)
