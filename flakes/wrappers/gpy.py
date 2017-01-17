@@ -68,7 +68,13 @@ class GPyStringKernel(StringKernel, Kern):
 
     @Cache_this(limit=3, ignore_args=())
     def Kdiag(self, X):
+        #if self.wrapper == 'norm':
+        #    return np.ones(X.shape[0])
+        
         result = StringKernel.K(self, X, X, diag=True)
+        #ugly workaround, should fix this in the sk code instead
+        if len(result.shape) == 2:
+            result = np.diag(result)
         #result = self.K(X, X, diag=True)
         return result[:len(X)]
 

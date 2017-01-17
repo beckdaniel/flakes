@@ -236,7 +236,7 @@ class TFBatchStringKernel(object):
         k_result, gap_grads, match_grads, coef_grads = self._K_unnorm(X, X2, gram, params, diag)
         if self.wrapper == 'none':
             return k_result, gap_grads, match_grads, coef_grads
-        
+
         # Else: we assume there is a variance parameter
         # and proceed calculation.
         self.variance = params[3]
@@ -248,7 +248,10 @@ class TFBatchStringKernel(object):
             ktt = np.outer(np.diag(k_result) + self.variance,
                            np.diag(k_result) + self.variance)
             sqrt_ktt = np.sqrt(ktt)
-            
+            #print params
+            #if np.isnan(np.sum(ktt)):
+            #    raise ValueError
+
             norm_k_result = k_result / sqrt_ktt
             gap_grads = self._normalise_grads(gap_grads, k_result, 
                                               norm_k_result, ktt, sqrt_ktt)
@@ -284,6 +287,8 @@ class TFBatchStringKernel(object):
             # We need to calculate the diagonals explicitly
             # but we do not need to update gradients
             # (risky...)
+            #if self.wrapper == 'norm':
+            #    return np.ones(X.shape[0]), gap_grads, match_grads, coef_grads, 0
             all_X = np.concatenate((X, X2))
             diag_k_result, _, _, _ = self._K_unnorm(all_X, None, gram=False, params=params, diag=True)
             diag_X = diag_k_result[:X.shape[0]] + self.variance

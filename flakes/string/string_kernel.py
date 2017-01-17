@@ -6,7 +6,12 @@ from sk_tf import TFStringKernel
 from sk_tf_batch_preload import TFBatchPreloadStringKernel
 from sk_tf_batch import TFBatchStringKernel
 from sk_numpy import NumpyStringKernel
+from sk_numpy_nograds import NumpyNoGradsStringKernel
 from sk_naive import NaiveStringKernel
+
+import pyximport; pyximport.install(setup_args={"include_dirs": np.get_include()})
+from sk_cynaive import CythonNaiveStringKernel
+
 from sk_util import build_one_hot
 from sk_util import encode_string
 import line_profiler
@@ -71,8 +76,12 @@ class StringKernel(object):
                                                        batch_size, config)
         elif mode == 'numpy':
             self._implementation = NumpyStringKernel(embs=embs, sim=sim)
+        elif mode == 'numpy-nograds':
+            self._implementation = NumpyNoGradsStringKernel(embs=embs, sim=sim)
         elif mode == 'naive':
             self._implementation = NaiveStringKernel(embs=embs)
+        elif mode == 'cynaive':
+            self._implementation = CythonNaiveStringKernel(embs=embs)
 
     @property
     def order(self):
@@ -112,12 +121,15 @@ class StringKernel(object):
         if self.index is not None:
             # If index is none we assume inputs are already
             # encoded in integer lists.
-            X = [[encode_string(x[0], self.index)] for x in X]
-            if not diag:
-                X2 = [[encode_string(x2[0], self.index)] for x2 in X2]
+            X = np.array([[encode_string(x[0], self.index)] for x in X])
+            #if not diag:
+            X2 = np.array([[encode_string(x2[0], self.index)] for x2 in X2])
         #print self.index
 
         params = self._get_params()
+        #print X
+        #print X2
+        #print diag
         result = self._implementation.K(X, X2, gram=gram, params=params, diag=diag)
         k_result = result[0]
 
