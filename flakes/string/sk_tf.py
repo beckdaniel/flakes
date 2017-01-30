@@ -38,7 +38,7 @@ class TFStringKernel(object):
         feed_dict = {self._s1: s1, self._s2: s2,
                      self._gap: params[0], 
                      self._match: params[1],
-                     self._coefs: np.array(params[2])[None, :]}
+                     self._coefs: np.array(params[3])[None, :]}
         output = sess.run(self.result, feed_dict=feed_dict)
         return output
 
@@ -106,8 +106,12 @@ class TFStringKernel(object):
             result = tf.matmul(self._coefs, Ki)
             gap_grads = tf.gradients(result, self._gap)
             match_grads = tf.gradients(result, self._match)
+            #ls_grads = tf.gradients(result, self._ls)
+            ls_grads = tf.zeros_like(gap_grads)
             coef_grads = tf.gradients(result, self._coefs)
-            all_stuff = [result] + gap_grads + match_grads + coef_grads
+            #all_stuff = [result] + gap_grads + match_grads + ls_grads
+            #all_stuff = [result] + gap_grads + match_grads + ls_grads + coef_grads
+            all_stuff = [result, gap_grads, match_grads, ls_grads, coef_grads]
             self.result = all_stuff
 
     def _dot(self, s1, s2, tf_embs):
@@ -148,7 +152,7 @@ class TFStringKernel(object):
         """
         # We need a better way to name this...
         # params[2] should be always order_coefs
-        order = len(params[2])
+        order = len(params[3])
 
         # We have to build a new graph if 1) there is no graph or
         # 2) current graph maxlen is not large enough for these inputs
@@ -175,18 +179,21 @@ class TFStringKernel(object):
             k_result = np.zeros(shape=(len(X)))
             gap_grads = np.zeros(shape=(len(X)))
             match_grads = np.zeros(shape=(len(X)))
+            ls_grads = np.zeros(shape=(len(X)))
             coef_grads = np.zeros(shape=(len(X), order))
             for i, x1 in enumerate(X):
                 result = self._k(x1[0], x1[0], params, sess)
                 k_result[i] = result[0]
-                gap_grads[i] = result[1]
-                match_grads[i] = result[2]
-                coef_grads[i] = np.array(result[3:])
+                gap_grads[i] = result[1][0]
+                match_grads[i] = result[2][0]
+                ls_grads[i] = result[3][0]
+                coef_grads[i] = np.array(result[4:])
         else:
             # Initialize return values
             k_result = np.zeros(shape=(len(X), len(X2)))
             gap_grads = np.zeros(shape=(len(X), len(X2)))
             match_grads = np.zeros(shape=(len(X), len(X2)))
+            ls_grads = np.zeros(shape=(len(X), len(X2)))
             coef_grads = np.zeros(shape=(len(X), len(X2), order))
 
             # All set up. Proceed with Gram matrix calculation.
@@ -196,12 +203,14 @@ class TFStringKernel(object):
                         k_result[i, j] = k_result[j, i]
                         gap_grads[i, j] = gap_grads[j, i]
                         match_grads[i, j] = match_grads[j, i]
+                        ls_grads[i, j] = ls_grads[j, i]
                         coef_grads[i, j] = coef_grads[j, i]
                     else:
                         result = self._k(x1[0], x2[0], params, sess)
                         k_result[i, j] = result[0]
-                        gap_grads[i, j] = result[1]
-                        match_grads[i, j] = result[2]
-                        coef_grads[i, j] = np.array(result[3:])
+                        gap_grads[i, j] = result[1][0]
+                        match_grads[i, j] = result[2][0]
+                        ls_grads[i, j] = result[3][0]
+                        coef_grads[i, j] = np.array(result[4:])
         sess.close()
-        return k_result, gap_grads, match_grads, coef_grads
+        return k_result, gap_grads, match_grads, ls_grads, coef_grads

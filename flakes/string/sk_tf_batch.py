@@ -93,12 +93,14 @@ class TFBatchStringKernel(object):
             dk_dgap, _, _ = self._final_calc(final_dKp_dgap, S, match_sq)
             dk_dmatch, _, _  = self._final_calc(final_dKp_dmatch, S, match_sq,
                                                 prev_sum2=sum2)
+
+            dk_dls = tf.zeros_like(dk_dgap)
             
             # Coef gradients are simply the individual
             # ngram kernel values
             dk_dcoefs = Ki
 
-            self.result = (k_result, dk_dgap, dk_dmatch, dk_dcoefs)
+            self.result = (k_result, dk_dgap, dk_dmatch, dk_dls, dk_dcoefs)
 
     def _init_constants(self, n):
         """
@@ -247,13 +249,13 @@ class TFBatchStringKernel(object):
         Actual kernel calculation, for now this is
         doing arc-cosine wrapping stuff.
         """
-        k_result, gap_grads, match_grads, coef_grads = self._K_unnorm(X, X2, gram, params, diag)
+        k_result, gap_grads, match_grads, ls_grads, coef_grads = self._K_unnorm(X, X2, gram, params, diag)
         if self.wrapper == 'none':
-            return k_result, gap_grads, match_grads, coef_grads
+            return k_result, gap_grads, match_grads, ls_grads, coef_grads
 
         # Else: we assume there is a variance parameter
         # and proceed calculation.
-        self.variance = params[3]
+        self.variance = params[4]
         # WARNING: This is done outside Tensorflow, we might
         # want to move this inside the GPU in the future
         if self.gram_mode:
@@ -271,7 +273,9 @@ class TFBatchStringKernel(object):
                                               norm_k_result, ktt, sqrt_ktt)
             match_grads = self._normalise_grads(match_grads, k_result,
                                                 norm_k_result, ktt, sqrt_ktt)
-            order = len(params[2])
+            ls_grads = self._normalise_grads(ls_grads, k_result,
+                                             norm_k_result, ktt, sqrt_ktt)
+            order = len(params[3])
             for i in range(order):
                 coef_grads[:, :, i] = self._normalise_grads(coef_grads[:, :, i], 
                                                             k_result,
@@ -293,6 +297,7 @@ class TFBatchStringKernel(object):
                 k_result = acos_result
                 gap_grads *= acos_grad_term
                 match_grads *= acos_grad_term
+                ls_grads *= acos_grad_term
                 for i in range(order):
                     coef_grads[:, :, i] *= acos_grad_term
                 var_grads *= acos_grad_term
@@ -304,7 +309,7 @@ class TFBatchStringKernel(object):
             #if self.wrapper == 'norm':
             #    return np.ones(X.shape[0]), gap_grads, match_grads, coef_grads, 0
             all_X = np.concatenate((X, X2))
-            diag_k_result, _, _, _ = self._K_unnorm(all_X, None, gram=False, params=params, diag=True)
+            diag_k_result, _, _, _, _ = self._K_unnorm(all_X, None, gram=False, params=params, diag=True)
             diag_X = diag_k_result[:X.shape[0]] + self.variance
             diag_X2 = diag_k_result[X.shape[0]:] + self.variance
             ktt = np.outer(diag_X, diag_X2)
@@ -316,7 +321,7 @@ class TFBatchStringKernel(object):
                 k_result = acos_result
             ####################
             var_grads = None
-        return k_result, gap_grads, match_grads, coef_grads, var_grads
+        return k_result, gap_grads, match_grads, ls_grads, coef_grads, var_grads
 
     def _normalise_grads(self, grad, k_result, norm_k_result, ktt, sqrt_ktt):
         first = grad / sqrt_ktt
@@ -334,7 +339,7 @@ class TFBatchStringKernel(object):
 
         # We need a better way to name this...
         # params[2] should be always order_coefs
-        order = len(params[2])
+        order = len(params[3])
 
         # Check input length, unlesse we are in Gram matrix mode.
         if gram:
@@ -375,6 +380,7 @@ class TFBatchStringKernel(object):
         k_results = np.zeros((len(X), len(X2)))
         gap_grads = np.zeros((len(X), len(X2)))
         match_grads = np.zeros((len(X), len(X2)))
+        ls_grads = np.zeros((len(X), len(X2)))
         coef_grads = np.zeros((len(X), len(X2), order))
 
         # Add optional tracing for profiling
@@ -405,7 +411,7 @@ class TFBatchStringKernel(object):
                 slist2 = np.array(slist2)
             feed_dict = {self._gap: params[0], 
                          self._match: params[1],
-                         self._coefs: np.array(params[2])[None, :],
+                         self._coefs: np.array(params[3])[None, :],
                          self._slist1: slist1,
                          self._slist2: slist2
                      }
@@ -414,7 +420,7 @@ class TFBatchStringKernel(object):
                                    options=run_options, 
                                    run_metadata=run_metadata)
             after = datetime.datetime.now()
-            k, gapg, matchg, coefsg = result
+            k, gapg, matchg, lsg, coefsg = result
             if self.trace is not None:
                 tl = timeline.Timeline(run_metadata.step_stats, graph=self.graph)
                 trace = tl.generate_chrome_trace_format()
@@ -426,6 +432,7 @@ class TFBatchStringKernel(object):
                 k_results[item[0], item[1]] = k[j]
                 gap_grads[item[0], item[1]] = gapg[j]
                 match_grads[item[0], item[1]] = matchg[j]
+                ls_grads[item[0], item[1]] = lsg[j]
                 coef_grads[item[0], item[1]] = coefsg[:, j]
 
         # Postprocess the matrices and return results.
@@ -435,17 +442,19 @@ class TFBatchStringKernel(object):
             for i in xrange(order):
                 new_coef_grads[:, :, i] = self._symmetrize(coef_grads[:, :, i])
             return (self._symmetrize(k_results), self._symmetrize(gap_grads),
-                    self._symmetrize(match_grads), new_coef_grads)
+                    self._symmetrize(match_grads), self._symmetrize(ls_grads),
+                    new_coef_grads)
         elif diag:
             # Get only the diagonals (the other elements are zeroes)
             new_coef_grads = np.zeros((len(X), order))
             for i in xrange(order):
                 new_coef_grads[:, i] = np.diag(coef_grads[:, :, i])
             return (np.diag(k_results), np.diag(gap_grads),
-                    np.diag(match_grads), new_coef_grads)
+                    np.diag(match_grads), np.diag(ls_grads),
+                    new_coef_grads)
         else:
             # Return full results
-            return k_results, gap_grads, match_grads, coef_grads
+            return k_results, gap_grads, match_grads, ls_grads, coef_grads
 
     def _symmetrize(self, matrix):
         """

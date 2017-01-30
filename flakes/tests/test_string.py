@@ -16,8 +16,8 @@ class StringKernelBasicTests(unittest.TestCase):
         alphabet = 'acgt'
         self.k_slow = flakes.string.StringKernel(mode='naive', alphabet=alphabet)
         self.k_np = flakes.string.StringKernel(mode='numpy', alphabet=alphabet, sim='dot')
-        self.k_tf = flakes.string.StringKernel(mode='tf',alphabet=alphabet)
-        self.k_tf_batch = flakes.string.StringKernel(mode='tf-batch',alphabet=alphabet)
+        self.k_tf = flakes.string.StringKernel(mode='tf', alphabet=alphabet)
+        self.k_tf_batch = flakes.string.StringKernel(mode='tf-batch', alphabet=alphabet)
         
     def test_sk_slow_1(self):
         self.k_slow.order_coefs = [1.] * 5

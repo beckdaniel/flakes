@@ -147,9 +147,11 @@ class TFBatchPreloadStringKernel(object):
             dKi_dmatch = tf.squeeze(dKi_dmatch, squeeze_dims=[2])
             dk_dmatch = tf.squeeze(tf.matmul(self._coefs, dKi_dmatch))
 
+            dk_dls = tf.zeros_like(dk_dgap)
+            
             dk_dcoefs = Ki
             
-            self.result = (k_result, dk_dgap, dk_dmatch, dk_dcoefs)
+            self.result = (k_result, dk_dgap, dk_dmatch, dk_dls, dk_dcoefs)
             
 
     def K(self, X, X2, gram, params, diag=False):
@@ -157,7 +159,7 @@ class TFBatchPreloadStringKernel(object):
         """
         # We need a better way to name this...
         # params[2] should be always order_coefs
-        order = len(params[2])
+        order = len(params[3])
 
         # If we are calculating the gram matrix we 
         # enter gram mode. In gram mode we skip
@@ -191,6 +193,7 @@ class TFBatchPreloadStringKernel(object):
         k_results = [] 
         gap_grads = []
         match_grads = []
+        ls_grads = []
         coef_grads = []
 
         # Add optional tracing for profiling
@@ -215,7 +218,7 @@ class TFBatchPreloadStringKernel(object):
             items2 = [elem[1] for elem in items]
             feed_dict = {self._gap: params[0], 
                          self._match: params[1],
-                         self._coefs: np.array(params[2])[None, :],
+                         self._coefs: np.array(params[3])[None, :],
                          self._indices1: np.array(items1),
                          self._indices2: np.array(items2)
                      }
@@ -224,7 +227,7 @@ class TFBatchPreloadStringKernel(object):
                               options=run_options, 
                               run_metadata=run_metadata)
             after = datetime.datetime.now()
-            k, gapg, matchg, coefsg = result
+            k, gapg, matchg, lsg, coefsg = result
             if self.trace is not None:
                 tl = timeline.Timeline(run_metadata.step_stats, graph=self.graph)
                 trace = tl.generate_chrome_trace_format()
@@ -234,6 +237,7 @@ class TFBatchPreloadStringKernel(object):
                 k_results.append(k[i])
                 gap_grads.append(gapg[i])
                 match_grads.append(matchg[i])
+                ls_grads.append(lsg[i])
                 coef_grads.append(coefsg[:, i])
             indices = indices[self.BATCH_SIZE:]
         sess.close()
@@ -247,13 +251,15 @@ class TFBatchPreloadStringKernel(object):
             k_results = self._triangulate(k_results, indices_copy, len(X), lenX2)
             gap_grads = self._triangulate(gap_grads, indices_copy, len(X), lenX2)
             match_grads = self._triangulate(match_grads, indices_copy, len(X), lenX2)
+            ls_grads = self._triangulate(ls_grads, indices_copy, len(X), lenX2)
             coef_grads = self._triangulate(coef_grads, indices_copy, len(X), lenX2)
         else:
             k_results = np.array(k_results)
             gap_grads = np.array(gap_grads)
             match_grads = np.array(match_grads)
+            ls_grads = np.array(ls_grads)
             coef_grads = np.array(coef_grads)
-        return k_results, gap_grads, match_grads, coef_grads
+        return k_results, gap_grads, match_grads, ls_grads, coef_grads
 
     def _code_and_pad(self, X, maxlen):
         """
