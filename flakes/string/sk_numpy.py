@@ -127,7 +127,7 @@ class NumpyStringKernel(object):
         pos1 = np.arange(len(s1), dtype=float)
         pos2 = np.arange(len(s2), dtype=float)
 
-        r2 = (pos1[:, None] + pos2[None, :]) ** 2
+        r2 = (pos1[:, None] - pos2[None, :]) ** 2
         pos_match = np.exp(-r2 / ls)
         dpos_dls_term = r2 / (ls ** 2)
         dpos_dls = dot * (pos_match * dpos_dls_term)

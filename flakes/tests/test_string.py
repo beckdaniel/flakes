@@ -274,7 +274,8 @@ class StringKernelGradientTests(unittest.TestCase):
         self.k_tf_preload = flakes.string.StringKernel(mode='tf-batch-preload', alphabet=alphabet)  
         self.k_tf_batch = flakes.string.StringKernel(mode='tf-batch', alphabet=alphabet, wrapper='none', batch_size=10)
         self.k_tf_batch_norm = flakes.string.StringKernel(mode='tf-batch', alphabet=alphabet, wrapper='norm', batch_size=10)
-        self.k_tf_pos = flakes.string.StringKernel(mode='numpy', alphabet=alphabet, sim='pos_dot')
+        self.k_np_pos = flakes.string.StringKernel(mode='numpy', alphabet=alphabet, sim='pos_dot')
+        self.k_tf_pos = flakes.string.StringKernel(mode='tf', alphabet=alphabet, sim='pos_dot')
 
     def test_gradient_gap_1(self):
         #self.k_tf.order_coefs = [0.1, 0.2, 0.4, 0.5, 0.7]
@@ -423,18 +424,18 @@ class StringKernelGradientTests(unittest.TestCase):
         self.assertAlmostEqual(np.sum(true_grads), np.sum(g_result), places=2)
 
     def test_gradient_positional_1(self):
-        self.k_tf_pos.order_coefs = [1.0] * 2
-        self.k_tf_pos.lengthscale = 1.0
+        self.k_np_pos.order_coefs = [1.0] * 2
+        self.k_np_pos.lengthscale = 1.0
         X = [[self.s1], [self.s2], [self.s3], [self.s4]]
         #X = np.array([np.array(s) for s in X])
-        result = self.k_tf_pos.K(X) 
-        true_grads = self.k_tf_pos.ls_grads
+        result = self.k_np_pos.K(X) 
+        true_grads = self.k_np_pos.ls_grads
 
         E = 1e-2
-        self.k_tf_pos.lengthscale = 1.0 + E
-        g_result1 = self.k_tf_pos.K(X)
-        self.k_tf_pos.lengthscale = 1.0 - E
-        g_result2 = self.k_tf_pos.K(X)
+        self.k_np_pos.lengthscale = 1.0 + E
+        g_result1 = self.k_np_pos.K(X)
+        self.k_np_pos.lengthscale = 1.0 - E
+        g_result2 = self.k_np_pos.K(X)
         g_result = (g_result1 - g_result2) / (2 * E)
 
         #print g_result1
@@ -444,16 +445,16 @@ class StringKernelGradientTests(unittest.TestCase):
         self.assertAlmostEqual(np.sum(true_grads), np.sum(g_result), places=2)
 
     def test_gradient_positional_sim_1(self):
-        enc1 = flakes.string.sk_util.encode_string(self.s1, self.k_tf_pos.index)
-        enc2 = flakes.string.sk_util.encode_string(self.s2, self.k_tf_pos.index)
+        enc1 = flakes.string.sk_util.encode_string(self.s1, self.k_np_pos.index)
+        enc2 = flakes.string.sk_util.encode_string(self.s2, self.k_np_pos.index)
         ls = 1.0
-        result, true_grads = self.k_tf_pos._implementation._pos_dot(enc1, enc2, ls)
+        result, true_grads = self.k_np_pos._implementation._pos_dot(enc1, enc2, ls)
 
         E = 1e-2
         ls = 1.0 + E
-        g_result1, _ = self.k_tf_pos._implementation._pos_dot(enc1, enc2, ls)
+        g_result1, _ = self.k_np_pos._implementation._pos_dot(enc1, enc2, ls)
         ls = 1.0 - E
-        g_result2, _ = self.k_tf_pos._implementation._pos_dot(enc1, enc2, ls)
+        g_result2, _ = self.k_np_pos._implementation._pos_dot(enc1, enc2, ls)
         g_result = (g_result1 - g_result2) / (2 * E)
 
         #print g_result1
@@ -461,6 +462,24 @@ class StringKernelGradientTests(unittest.TestCase):
         #print g_result
         #print true_grads
         self.assertAlmostEqual(np.sum(true_grads), np.sum(g_result), places=2)
+
+    def test_gradient_positional_tf_vs_np(self):
+        self.k_np_pos.order_coefs = [1.0] * 2
+        self.k_np_pos.lengthscale = 1.0
+        X = [[self.s1], [self.s2], [self.s3], [self.s4]]
+        #X = np.array([np.array(s) for s in X])
+        result = self.k_np_pos.K(X) 
+        true_grads = self.k_np_pos.ls_grads
+
+        self.k_tf_pos.order_coefs = [1.0] * 2
+        self.k_tf_pos.lengthscale = 1.0
+        X = [[self.s1], [self.s2], [self.s3], [self.s4]]
+        #X = np.array([np.array(s) for s in X])
+        result_tf = self.k_tf_pos.K(X) 
+        true_grads_tf = self.k_tf_pos.ls_grads
+
+        self.assertAlmostEqual(np.sum(result), np.sum(result_tf), places=2)
+        self.assertAlmostEqual(np.sum(true_grads), np.sum(true_grads_tf), places=2)
         
 if __name__ == "__main__":
     unittest.main()
