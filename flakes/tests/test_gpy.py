@@ -22,22 +22,23 @@ class GPyStringKernelTests(unittest.TestCase):
 
         alphabet = 'ab'
         self.k_tf = flakes.wrappers.gpy.GPyStringKernel(mode='tf', alphabet=alphabet, order_coefs=[1.0])
-        self.k_tf2 = flakes.wrappers.gpy.GPyStringKernel(mode='tf-batch', alphabet=alphabet, order_coefs=[1.0, 1.0])
+        self.k_tf2 = flakes.wrappers.gpy.GPyStringKernel(mode='tf', alphabet=alphabet, order_coefs=[1.0, 1.0])
         self.k_tf_batch = flakes.wrappers.gpy.GPyStringKernel(mode='tf-batch', alphabet=alphabet, order_coefs=[1.0], wrapper='none')
         self.k_tf_batch2 = flakes.wrappers.gpy.GPyStringKernel(mode='tf-batch', alphabet=alphabet, order_coefs=[1.0, 1.0], sim='arccosine', wrapper='arccos0')
         self.k_tf_rbf = flakes.wrappers.gpy.RBFStringKernel(mode='tf-batch', alphabet=alphabet, order_coefs=[1.0]*5)
         
-    @unittest.skip('')
+    #@unittest.skip('')
     def test_linear_vs_sk(self):
         self.k_tf_batch.order_coefs = [1.]
         self.k_tf_batch.gap_decay = 1.0
         self.k_tf_batch.match_decay = 1.0
         
-        sk_result = self.k_tf_batch.K(self.s1, self.s2)
+        sk_result = self.k_tf_batch.K(np.array([[self.s1]]),
+                                      np.array([[self.s2]]))
         print sk_result
         print np.dot(self.s1_bow, self.s2_bow)
 
-    @unittest.skip('')
+    #@unittest.skip('')
     def test_caching(self):
         self.k_tf_batch.order_coefs = [1.] * 5
         self.k_tf_batch.gap_decay = 1.0
@@ -57,6 +58,7 @@ class GPyStringKernelTests(unittest.TestCase):
         print sk_result
         print np.dot(self.s1_bow, self.s2_bow)
 
+    @unittest.skip('rbf')
     def test_rbf(self):
         self.k_tf_rbf.order_coefs = [1.] * 5
         self.k_tf_rbf.gap_decay = 0.1
@@ -75,6 +77,7 @@ class GPyStringKernelTests(unittest.TestCase):
         print "REPETITION END"
         print sk_result
 
+    @unittest.skip('rbf')
     def test_rbf_inside_gp_regression(self):
         #self.k_tf_rbf.order_coefs = [1.] * 5
         self.k_tf_rbf.gap_decay = 0.1
@@ -91,7 +94,7 @@ class GPyStringKernelTests(unittest.TestCase):
         print m.checkgrad(verbose=True)
         
 
-    @unittest.skip('')
+    #@unittest.skip('')
     def test_linear_vs_sk_gpy(self):
         #self.k_tf_batch.order_coefs = np.array([1.])
         self.k_tf_batch.gap_decay = 1.0
@@ -120,7 +123,7 @@ class GPyStringKernelTests(unittest.TestCase):
         print m1.predict(X1)
         print m2.predict(X2)
 
-    @unittest.skip('')
+    #@unittest.skip('')
     def test_linear_vs_sk_gpy_2(self):
         #self.k_tf_batch.order_coefs = [1., 1.]
         #self.k_tf_batch.gap_decay = 1.0
@@ -151,14 +154,14 @@ class GPyStringKernelTests(unittest.TestCase):
         print m2
         print m2.checkgrad(verbose=True)        
 
-    @unittest.skip('')
+    #@unittest.skip('')
     def test_linear_vs_sk_autograd_gpy(self):
         #self.k_tf_batch.order_coefs = np.array([1.])
         self.k_tf.gap_decay = 1.0
         self.k_tf.match_decay = 1.0
         X1 = np.array([[self.s1], [self.s2]])
         Y1 = np.array([[3.0], [5.0]])
-        m1 = GPy.models.GPRegression(X1, Y1, kernel=self.k_tf)
+        m1 = GPy.models.GPRegression(X1, Y1, kernel=self.k_tf_batch)
         #m1['.*match.*'].constrain_fixed(1.0)
         m1['.*coefs.*'].constrain_fixed([1.0])
         print m1
@@ -178,7 +181,7 @@ class GPyStringKernelTests(unittest.TestCase):
         m2.optimize(messages=True)
         print m2
 
-    @unittest.skip('')
+    #@unittest.skip('')
     def test_linear_vs_sk_autograd_gpy_2(self):
         #self.k_tf_batch.order_coefs = [1., 1.]
         #self.k_tf_batch.gap_decay = 1.0
@@ -209,7 +212,7 @@ class GPyStringKernelTests(unittest.TestCase):
         print m2
         print m2.checkgrad(verbose=True)        
 
-    @unittest.skip('')
+    #@unittest.skip('')
     def test_manualgrad_vs_sk_autograd_gpy_2(self):
         #self.k_tf_batch.order_coefs = [1., 1.]
         #self.k_tf_batch.gap_decay = 1.0
@@ -241,7 +244,7 @@ class GPyStringKernelTests(unittest.TestCase):
         print m2['.*coefs.*']
         print m2.checkgrad(verbose=True)        
 
-    @unittest.skip('')
+    #@unittest.skip('')
     def test_linear_vs_sk_autograd_gpy_2(self):
         #self.k_tf_batch.order_coefs = np.array([1.])
         self.k_tf.gap_decay = 1.0
@@ -290,7 +293,7 @@ class GPyStringKernelTests(unittest.TestCase):
         #print m1.kern._get_params()
 
 
-    @unittest.skip('')
+    #@unittest.skip('')
     def test_linear_vs_sk_autograd_gpy_3(self):
         #self.k_tf_batch.order_coefs = np.array([1.])
         self.k_tf.gap_decay = 1.0

@@ -52,6 +52,7 @@ class GPyStringKernel(StringKernel, Kern):
             n_out = dL_dK.shape[0] / self.gap_grads.shape[0]
             self.gap_decay.gradient = np.sum(np.tile(self.gap_grads, (n_out, n_out)) * dL_dK)
             self.match_decay.gradient = np.sum(np.tile(self.match_grads, (n_out, n_out)) * dL_dK)
+            self.lengthscale.gradient = np.sum(self.ls_grads * dL_dK)
             for i in xrange(self.order):
                 self.order_coefs.gradient[i] = np.sum(np.tile(self.coef_grads[:, :, i], (n_out, n_out)) * dL_dK)
             if self.wrapper != 'none':
@@ -98,6 +99,7 @@ class GPyStringKernel(StringKernel, Kern):
 
         else:
             return [self.gap_decay[0], self.match_decay[0],
+                    self.lengthscale[0],
                     self.order_coefs, self.variance[0]]
         
 

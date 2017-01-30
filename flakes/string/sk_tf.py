@@ -106,12 +106,18 @@ class TFStringKernel(object):
             result = tf.matmul(self._coefs, Ki)
             gap_grads = tf.gradients(result, self._gap)
             match_grads = tf.gradients(result, self._match)
+            if order == 1:
+                # gaps are not used when 1-grams are used
+                # need this to ensure gap_grads is not None
+                gap_grads = tf.zeros_like(match_grads)
             #ls_grads = tf.gradients(result, self._ls)
-            ls_grads = tf.zeros_like(gap_grads)
+            ls_grads = tf.zeros_like(match_grads)
+            #ls_grads = 0.0
             coef_grads = tf.gradients(result, self._coefs)
             #all_stuff = [result] + gap_grads + match_grads + ls_grads
             #all_stuff = [result] + gap_grads + match_grads + ls_grads + coef_grads
-            all_stuff = [result, gap_grads, match_grads, ls_grads, coef_grads]
+            all_stuff = (result, gap_grads, match_grads, ls_grads, coef_grads)
+            #all_stuff = (result, gap_grads, match_grads, coef_grads)
             self.result = all_stuff
 
     def _dot(self, s1, s2, tf_embs):

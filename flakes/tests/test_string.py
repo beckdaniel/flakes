@@ -37,10 +37,10 @@ class StringKernelBasicTests(unittest.TestCase):
         self.assertAlmostEqual(result, expected)
 
     def test_sk_tf_1(self):
-        self.k_tf.order_coefs = [1.] * 5
+        self.k_tf.order_coefs = [1.] * 1
         self.k_tf.gap_decay = 2.0
         self.k_tf.match_decay = 2.0
-        expected = 504.0
+        expected = 24.0
         result = self.k_tf.K(self.s1, self.s2)
         self.assertAlmostEqual(result, expected)
 
