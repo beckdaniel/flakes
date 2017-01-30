@@ -20,7 +20,7 @@ class NaiveStringKernel(object):
         m = len(s2)
         gap = params[0]
         match = params[1]
-        coefs = params[2]
+        coefs = params[3]
         order = len(coefs)
 
         #if not isinstance(s1, np.ndarray):
@@ -75,4 +75,4 @@ class NaiveStringKernel(object):
                     k_result[i, j] = k_result[j, i]
                 else:
                     k_result[i, j] = self._k(x1[0], x2[0], params)
-        return k_result, 0, 0, 0
+        return k_result, 0, 0, 0, 0

@@ -133,7 +133,7 @@ class NumpyStringKernel(object):
         dpos_dls = dot + (pos_match * dpos_dls_term)
         return dot * pos_match, dpos_dls
 
-    def _arccosine(self, s1, s2):
+    def _arccosine(self, s1, s2, ls):
         """
         Uses an arccosine kernel of degree 0 to calculate
         the similarity matrix between two vectors of embeddings. 
@@ -149,7 +149,7 @@ class NumpyStringKernel(object):
         # which put some values outside the arccosine range.
         cosine = np.clip(dot / norms, -1, 1)
         angle = np.arccos(cosine)
-        return 1 - (angle / np.pi)
+        return 1 - (angle / np.pi), 0.0
 
     def K(self, X, X2, gram, params, diag=False):
         """

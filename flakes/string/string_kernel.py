@@ -103,12 +103,12 @@ class StringKernel(object):
         """
         # Symmetry check to ensure that we only calculate
         # the lower diagonal.
-        if X2 is None and not diag:
+        gram = False
+        if X2 is None:# and not diag:
             X2 = X
-            gram = True
-        else:
-            gram = False
-
+            if not diag:
+                gram = True
+                
         # This can also be calculated for single elements but
         # we need to explicitly convert to lists before any
         # processing
