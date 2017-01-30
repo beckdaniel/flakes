@@ -124,13 +124,13 @@ class NumpyStringKernel(object):
         Also return the gradients.
         """
         dot, _ = self._dot(s1, s2, ls)
-        pos1 = np.arange(s1.shape[0], dtype=float)
-        pos2 = np.arange(s2.shape[0], dtype=float)
+        pos1 = np.arange(len(s1), dtype=float)
+        pos2 = np.arange(len(s2), dtype=float)
 
         r2 = (pos1[:, None] + pos2[None, :]) ** 2
         pos_match = np.exp(-r2 / ls)
         dpos_dls_term = r2 / (ls ** 2)
-        dpos_dls = dot + (pos_match * dpos_dls_term)
+        dpos_dls = dot * (pos_match * dpos_dls_term)
         return dot * pos_match, dpos_dls
 
     def _arccosine(self, s1, s2, ls):
