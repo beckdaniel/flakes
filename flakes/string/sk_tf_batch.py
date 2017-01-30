@@ -26,6 +26,8 @@ class TFBatchStringKernel(object):
         if sim == 'arccosine':
             self.sim = self._arccosine
             self.norms = np.sqrt(np.sum(pow(embs, 2), 1, keepdims=True))
+        elif sim == 'pos_dot':
+            self.sim = self._pos_dot
         elif sim == 'dot':
             self.sim = self._dot
         self.graph = None
@@ -125,6 +127,18 @@ class TFBatchStringKernel(object):
         matlist1 = tf.gather(tf_embs, slist1, name='matlist1')
         matlist2 = tf.matrix_transpose(tf.gather(tf_embs, slist2, name='matlist2'))
         return tf.batch_matmul(matlist1, matlist2)
+
+    def _pos_dot(self, slist1, slist2, tf_embs):
+        """
+        Dot product with an additional SE kernel on position.
+        Position is obtained by gathering the indexes of each string.
+        """
+        dot = self._dot(slist1, slist2, tf_embs)
+        
+        
+        matlist1 = tf.gather(tf_embs, slist1, name='matlist1')
+        matlist2 = tf.matrix_transpose(tf.gather(tf_embs, slist2, name='matlist2'))
+        
 
     def _arccosine(self, slist1, slist2, tf_embs):
         """

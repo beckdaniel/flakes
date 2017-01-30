@@ -46,8 +46,8 @@ class StringKernel(object):
     """
 
     def __init__(self, gap_decay=1.0, match_decay=1.0,
-                 order_coefs=[1.0], variance=1.0, mode='tf-batch',
-                 sim='dot', wrapper='none',
+                 order_coefs=[1.0], variance=1.0, lengthscale=1.0,
+                 mode='tf-batch', sim='dot', wrapper='none',
                  embs=None, index=None, alphabet=None, device='/cpu:0',
                  batch_size=1000, config=None, trace=None):
         if (embs is None) and (alphabet is None):
@@ -64,6 +64,7 @@ class StringKernel(object):
         self.gap_decay = gap_decay
         self.match_decay = match_decay
         self.variance = variance
+        self.lengthscale = lengthscale
         self.order_coefs = order_coefs
         self.wrapper = wrapper
         if mode == 'tf':
@@ -91,7 +92,7 @@ class StringKernel(object):
         return len(self.order_coefs)
 
     def _get_params(self):
-        return [self.gap_decay, self.match_decay, 
+        return [self.gap_decay, self.match_decay, self.lengthscale,
                 self.order_coefs, self.variance]
 
     def K(self, X, X2=None, diag=False):
@@ -127,16 +128,14 @@ class StringKernel(object):
         #print self.index
 
         params = self._get_params()
-        #print X
-        #print X2
-        #print diag
         result = self._implementation.K(X, X2, gram=gram, params=params, diag=diag)
         k_result = result[0]
 
         self.gap_grads = result[1]
         self.match_grads = result[2]
-        self.coef_grads = result[3]
+        self.ls_grads = result[3]
+        self.coef_grads = result[4]
         if self.wrapper != 'none':
-            self.var_grads = result[4]
+            self.var_grads = result[5]
         return k_result
 

@@ -12,7 +12,8 @@ class GPyStringKernel(StringKernel, Kern):
     Flakes string kernel wrapped in a GPy API.
     """
     def __init__(self, gap_decay=1.0, match_decay=1.0,
-                 order_coefs=[1.0], variance=1.0, 
+                 order_coefs=[1.0], variance=1.0,
+                 lengthscale=1.0,
                  mode='tf-batch',
                  sim='dot', wrapper='none',
                  active_dims=None, name='string',
@@ -21,7 +22,7 @@ class GPyStringKernel(StringKernel, Kern):
                  config=None, index=None):
         Kern.__init__(self, 1, active_dims, name)
         StringKernel.__init__(self, gap_decay, match_decay,
-                              order_coefs, variance, mode, 
+                              order_coefs, variance, lengthscale, mode, 
                               sim=sim, wrapper=wrapper, embs=embs,
                               alphabet=alphabet, device=device,
                               batch_size=batch_size, config=config,
@@ -34,9 +35,13 @@ class GPyStringKernel(StringKernel, Kern):
         self.link_parameter(self.match_decay)
         self.link_parameter(self.order_coefs)
         self.wrapper = wrapper
+        self.sim = sim
+        self.lengthscale = Param('lengthscale', lengthscale, Logexp())
         if wrapper != 'none':
             self.variance = Param('variance', variance, Logexp())
             self.link_parameter(self.variance)
+        if sim == 'pos_dot':
+            self.link_parameter(self.lengthscale)
 
     def update_gradients_full(self, dL_dK, X, X2=None):
         if X2 is None: 
@@ -54,6 +59,7 @@ class GPyStringKernel(StringKernel, Kern):
         else:
             self.gap_decay.gradient = np.sum(self.gap_grads * dL_dK)
             self.match_decay.gradient = np.sum(self.match_grads * dL_dK)
+            self.lengthscale.gradient = np.sum(self.ls_grads * dL_dK)
             for i in xrange(self.order):
                 self.order_coefs.gradient[i] = np.sum(self.coef_grads[:, :, i] * dL_dK)
             if self.wrapper != 'none':
@@ -83,8 +89,13 @@ class GPyStringKernel(StringKernel, Kern):
         Overriding this because of the way GPy handles parameters.
         """
         if self.wrapper == 'none':
-            return [self.gap_decay[0], self.match_decay[0],
-                    self.order_coefs]
+            if self.sim == 'dot':
+                return [self.gap_decay[0], self.match_decay[0],
+                        self.lengthscale[0], self.order_coefs]
+            elif self.sim == 'pos_dot':
+                return [self.gap_decay[0], self.match_decay[0],
+                        self.lengthscale[0], self.order_coefs]
+
         else:
             return [self.gap_decay[0], self.match_decay[0],
                     self.order_coefs, self.variance[0]]

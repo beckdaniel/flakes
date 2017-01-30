@@ -4,6 +4,8 @@ import numpy as np
 def build_one_hot(alphabet):
     """
     Build one-hot encodings for a given alphabet.
+    This also adds a 0 vector corresponding to index 0,
+    which is used for padding.    
     """
     dim = len(alphabet)
     embs = np.zeros((dim+1, dim))
