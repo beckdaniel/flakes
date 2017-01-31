@@ -152,7 +152,7 @@ class TFBatchStringKernel(object):
         r2 = tf.to_double((pos[:, None] - pos[None, :]) ** 2)
         pos_match = tf.exp(tf.truediv(-r2, ls))
         result = tf.mul(dot, pos_match)
-        dpos_dls_term = tf.truediv(r2, tf.pow(ls, 2.0))
+        dpos_dls_term = tf.truediv(r2, tf.pow(ls, tf.constant(2.0)))
         dpos_dls = tf.mul(dot, tf.mul(pos_match, dpos_dls_term))
         return result, dpos_dls
 
