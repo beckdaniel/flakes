@@ -149,10 +149,10 @@ class TFBatchStringKernel(object):
         # final results rely on broadcast through the shape
         # of 'dot'.
         pos = tf.range(tf.shape(slist1)[1])
-        r2 = tf.to_double((pos[:, None] - pos[None, :]) ** 2)
+        r2 = tf.pow(tf.to_double((pos[:, None] - pos[None, :])), 2.0)
         pos_match = tf.exp(tf.truediv(-r2, ls))
         result = tf.mul(dot, pos_match)
-        dpos_dls_term = tf.truediv(r2, tf.pow(ls, tf.constant(2.0)))
+        dpos_dls_term = tf.truediv(r2, tf.pow(ls, 2.0))#tf.constant(2.0, dtype=tf.float64)))
         dpos_dls = tf.mul(dot, tf.mul(pos_match, dpos_dls_term))
         return result, dpos_dls
 
