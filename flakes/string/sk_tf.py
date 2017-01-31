@@ -126,7 +126,6 @@ class TFStringKernel(object):
         """
         Simple dot product between two vectors of embeddings.
         This returns a matrix of positive real numbers.
-        Also return the gradients (zero in this case).
         """
         mat1 = tf.gather(tf_embs, s1)
         mat2 = tf.gather(tf_embs, s2)
@@ -137,20 +136,12 @@ class TFStringKernel(object):
         """
         Dot product with an additional SE kernel on position.
         Position is obtained by gathering the indexes of each string.
-        Also return the gradients.
         """
         dot = self._dot(s1, s2, tf_embs, ls)
-        #pos1 = np.arange(len(s1), dtype=float)
-        #pos2 = np.arange(len(s2), dtype=float)
-        pos1 = tf.range(tf.shape(s1)[0])#, dtype=tf.float64)
-        pos2 = tf.range(tf.shape(s2)[0])#, dtype=tf.float64)
+        pos1 = tf.range(tf.shape(s1)[0])
+        pos2 = tf.range(tf.shape(s2)[0])
         r2 = tf.to_double((pos1[:, None] - pos2[None, :]) ** 2)
         pos_match = tf.exp(-r2 / ls)
-
-        #r2 = (pos1[:, None] + pos2[None, :]) ** 2
-        #pos_match = np.exp(-r2 / ls)
-        #dpos_dls_term = r2 / (ls ** 2)
-        #dpos_dls = dot * (pos_match * dpos_dls_term)
         return dot * pos_match
 
     def _arccosine(self, s1, s2, tf_embs, ls):

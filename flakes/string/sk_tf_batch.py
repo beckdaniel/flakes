@@ -59,6 +59,7 @@ class TFBatchStringKernel(object):
             # and to update the hyper gradients.
             self._gap = tf.placeholder("float64", [], name='gap_decay')
             self._match = tf.placeholder("float64", [], name='match_decay')
+            self._ls = tf.placeholder("float64", [], name='lengthscale')
             self._coefs = tf.placeholder("float64", [1, order], name='coefs')
             self._slist1 = tf.placeholder("int32", [self.BATCH_SIZE, n], name='slist1')
             self._slist2 = tf.placeholder("int32", [self.BATCH_SIZE, n], name='slist2')
@@ -68,10 +69,10 @@ class TFBatchStringKernel(object):
 
             # Similarity matrix calculation. This is the only
             # place where the embeddings are used.
-            S = self.sim(self._slist1, self._slist2, tf_embs)
+            S, dS_dls = self.sim(self._slist1, self._slist2, tf_embs, self._ls)
 
             # Kp and gradient matrices initialisation
-            Kp, dKp_dgap, dKp_dmatch = self._init_Kp(n)
+            Kp, dKp_dgap, dKp_dmatch, dKp_dls = self._init_Kp(n)
 
             # Main kernel calculation happens here.
             # "i" correspond to the ngram order.
@@ -82,6 +83,8 @@ class TFBatchStringKernel(object):
                                                       dD_dgap, aux2, aux7))
                 dKp_dmatch.append(self._calc_dKp_dmatch_i(dKp_dmatch[i], S, D, n, 
                                                           match_sq, aux3))
+                dKp_dls.append(self._calc_dKp_dls_i(dKp_dls[i], S, D, n, 
+                                                    match_sq, Kp[i], dS_dls))
 
             # Final calculation. We gather all Kps and
             # multiply then by their coeficients.
@@ -89,12 +92,15 @@ class TFBatchStringKernel(object):
             final_Kp = tf.pack(Kp)
             final_dKp_dgap = tf.pack(dKp_dgap)
             final_dKp_dmatch = tf.pack(dKp_dmatch)
+            final_dKp_dls = tf.pack(dKp_dls)
             k_result, Ki, sum2 = self._final_calc(final_Kp, S, match_sq)
             dk_dgap, _, _ = self._final_calc(final_dKp_dgap, S, match_sq)
             dk_dmatch, _, _  = self._final_calc(final_dKp_dmatch, S, match_sq,
                                                 prev_sum2=sum2)
+            dk_dls, _, _  = self._final_calc(final_dKp_dls, S, match_sq,
+                                             Kp=final_Kp, dS_dls=dS_dls)
 
-            dk_dls = tf.zeros_like(dk_dgap)
+            #dk_dls = tf.zeros_like(dk_dgap)
             
             # Coef gradients are simply the individual
             # ngram kernel values
@@ -121,28 +127,36 @@ class TFBatchStringKernel(object):
         match_sq = tf.pow(self._match, 2, name='match_sq')
         return D, dD_dgap, match_sq
 
-    def _dot(self, slist1, slist2, tf_embs):
+    def _dot(self, slist1, slist2, tf_embs, ls):
         """
         Simple dot product between two vectors of embeddings.
         This returns a matrix of positive real numbers.
         """
         matlist1 = tf.gather(tf_embs, slist1, name='matlist1')
         matlist2 = tf.matrix_transpose(tf.gather(tf_embs, slist2, name='matlist2'))
-        return tf.batch_matmul(matlist1, matlist2)
+        dot = tf.batch_matmul(matlist1, matlist2)
+        return dot, tf.zeros_like(dot)
 
-    def _pos_dot(self, slist1, slist2, tf_embs):
+    def _pos_dot(self, slist1, slist2, tf_embs, ls):
         """
         Dot product with an additional SE kernel on position.
         Position is obtained by gathering the indexes of each string.
         """
-        dot = self._dot(slist1, slist2, tf_embs)
-        
-        
-        matlist1 = tf.gather(tf_embs, slist1, name='matlist1')
-        matlist2 = tf.matrix_transpose(tf.gather(tf_embs, slist2, name='matlist2'))
-        
+        dot, _ = self._dot(slist1, slist2, tf_embs, ls)
 
-    def _arccosine(self, slist1, slist2, tf_embs):
+        # All vectors have the same length, just padded.
+        # We compute only a single positional matrix here,
+        # final results rely on broadcast through the shape
+        # of 'dot'.
+        pos = tf.range(tf.shape(slist1)[1])
+        r2 = tf.to_double((pos[:, None] - pos[None, :]) ** 2)
+        pos_match = tf.exp(tf.truediv(-r2, ls))
+        result = tf.mul(dot, pos_match)
+        dpos_dls_term = tf.truediv(r2, tf.pow(ls, 2))
+        dpos_dls = tf.mul(dot, tf.mul(pos_match, dpos_dls_term))
+        return result, dpos_dls
+
+    def _arccosine(self, slist1, slist2, tf_embs, ls):
         """
         Uses an arccosine kernel of degree 0 to calculate
         the similarity matrix between two vectors of embeddings. 
@@ -161,7 +175,7 @@ class TFBatchStringKernel(object):
         cosine = tf.clip_by_value(tf.truediv(dot, norms), -1, 1)
         angle = tf.acos(cosine)
         angle = tf.select(tf.is_nan(angle), tf.ones_like(angle) * tf_pi, angle)
-        return 1 - (angle / tf_pi)
+        return 1 - (angle / tf_pi), tf.zeros_like(angle)
 
     def _init_Kp(self, n):
         """
@@ -171,10 +185,12 @@ class TFBatchStringKernel(object):
         Kp = []
         dKp_dgap = []
         dKp_dmatch = []
+        dKp_dls = []
         Kp.append(tf.ones(shape=(self.BATCH_SIZE, n, n), dtype=tf.float64))
         dKp_dgap.append(tf.zeros(shape=(self.BATCH_SIZE, n, n), dtype=tf.float64))
         dKp_dmatch.append(tf.zeros(shape=(self.BATCH_SIZE, n, n), dtype=tf.float64))
-        return Kp, dKp_dgap, dKp_dmatch
+        dKp_dls.append(tf.zeros(shape=(self.BATCH_SIZE, n, n), dtype=tf.float64))
+        return Kp, dKp_dgap, dKp_dmatch, dKp_dls
                           
     def _calc_Kp_i(self, Kp_i, S, D, n, match_sq):
         """
@@ -228,13 +244,34 @@ class TFBatchStringKernel(object):
         daux10_dmatch = tf.transpose(daux9_dmatch, perm=[0, 2, 1])
         return daux10_dmatch
 
-    def _final_calc(self, final_tensor, S, match_sq, prev_sum2=None):
+    def _calc_dKp_dls_i(self, dKp_dls_i, S, D, n, match_sq, Kp_i, dS_dls):
+        """
+        Calculate the gradient of Kp with respect
+        to the lengthscale.
+        """
+        daux1_dls = tf.mul(dS_dls, Kp_i) + tf.mul(S, dKp_dls_i)
+        daux2_dls = tf.reshape(daux1_dls, tf.pack([self.BATCH_SIZE * n, n]))
+        daux3_dls = tf.matmul(daux2_dls, D)
+        daux4_dls = daux3_dls * match_sq
+        daux5_dls = tf.reshape(daux4_dls, tf.pack([self.BATCH_SIZE, n, n]))
+        daux6_dls = tf.transpose(daux5_dls, perm=[0, 2, 1])
+        daux7_dls = tf.reshape(daux6_dls, tf.pack([self.BATCH_SIZE * n, n]))
+        daux8_dls = tf.matmul(daux7_dls, D)
+        daux9_dls = tf.reshape(daux8_dls, tf.pack([self.BATCH_SIZE, n, n]))
+        daux10_dls = tf.transpose(daux9_dls, perm=[0, 2, 1])
+        return daux10_dls
+        
+    def _final_calc(self, final_tensor, S, match_sq, prev_sum2=None, Kp=None,
+                    dS_dls=None):
         """
         Common method to wrap up the kernel calculations.
         This is also used for gradients since they are 
         mostly similar (except for match).
         """
-        mul1 = tf.mul(S, final_tensor)
+        if Kp is not None:
+            mul1 = tf.mul(dS_dls, Kp) + tf.mul(S, final_tensor)
+        else:
+            mul1 = tf.mul(S, final_tensor)
         sum1 = tf.reduce_sum(mul1, 2)
         sum2 = tf.reduce_sum(sum1, 2, keep_dims=True)
         mul2 = tf.mul(sum2, match_sq)
@@ -411,6 +448,7 @@ class TFBatchStringKernel(object):
                 slist2 = np.array(slist2)
             feed_dict = {self._gap: params[0], 
                          self._match: params[1],
+                         self._ls: params[2],
                          self._coefs: np.array(params[3])[None, :],
                          self._slist1: slist1,
                          self._slist2: slist2

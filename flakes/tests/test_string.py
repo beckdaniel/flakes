@@ -276,6 +276,7 @@ class StringKernelGradientTests(unittest.TestCase):
         self.k_tf_batch_norm = flakes.string.StringKernel(mode='tf-batch', alphabet=alphabet, wrapper='norm', batch_size=10)
         self.k_np_pos = flakes.string.StringKernel(mode='numpy', alphabet=alphabet, sim='pos_dot')
         self.k_tf_pos = flakes.string.StringKernel(mode='tf', alphabet=alphabet, sim='pos_dot')
+        self.k_tf_pos_batch = flakes.string.StringKernel(mode='tf-batch', alphabet=alphabet, sim='pos_dot')
 
     def test_gradient_gap_1(self):
         #self.k_tf.order_coefs = [0.1, 0.2, 0.4, 0.5, 0.7]
@@ -478,6 +479,26 @@ class StringKernelGradientTests(unittest.TestCase):
         result_tf = self.k_tf_pos.K(X) 
         true_grads_tf = self.k_tf_pos.ls_grads
 
+        self.assertAlmostEqual(np.sum(result), np.sum(result_tf), places=2)
+        self.assertAlmostEqual(np.sum(true_grads), np.sum(true_grads_tf), places=2)
+
+    def test_gradient_positional_tf_vs_batch(self):
+        self.k_tf_pos_batch.order_coefs = [1.0] * 2
+        self.k_tf_pos_batch.lengthscale = 1.0
+        X = [[self.s1], [self.s2], [self.s3], [self.s4]]
+        #X = np.array([np.array(s) for s in X])
+        result = self.k_tf_pos_batch.K(X) 
+        true_grads = self.k_tf_pos_batch.ls_grads
+
+        self.k_tf_pos.order_coefs = [1.0] * 2
+        self.k_tf_pos.lengthscale = 1.0
+        X = [[self.s1], [self.s2], [self.s3], [self.s4]]
+        #X = np.array([np.array(s) for s in X])
+        result_tf = self.k_tf_pos.K(X) 
+        true_grads_tf = self.k_tf_pos.ls_grads
+
+        #print true_grads
+        #print true_grads_tf
         self.assertAlmostEqual(np.sum(result), np.sum(result_tf), places=2)
         self.assertAlmostEqual(np.sum(true_grads), np.sum(true_grads_tf), places=2)
         
