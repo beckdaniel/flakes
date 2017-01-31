@@ -1,5 +1,5 @@
 from flakes.string import StringKernel
-from paramz.transformations import Logexp
+from paramz.transformations import Logexp, LogexpClipped
 from GPy.kern import Kern
 from GPy.core.parameterization import Param
 import numpy as np
@@ -27,18 +27,19 @@ class GPyStringKernel(StringKernel, Kern):
                               alphabet=alphabet, device=device,
                               batch_size=batch_size, config=config,
                               index=index)
-        self.gap_decay = Param('gap_decay', gap_decay, Logexp())
-        self.match_decay = Param('match_decay', match_decay, Logexp())
-        self.order_coefs = Param('coefs', order_coefs, Logexp())
+        self.gap_decay = Param('gap_decay', gap_decay, LogexpClipped())
+        self.match_decay = Param('match_decay', match_decay, LogexpClipped())
+        self.order_coefs = Param('coefs', order_coefs, LogexpClipped())
         self.graph = None
         self.link_parameter(self.gap_decay)
         self.link_parameter(self.match_decay)
         self.link_parameter(self.order_coefs)
         self.wrapper = wrapper
         self.sim = sim
-        self.lengthscale = Param('lengthscale', lengthscale, Logexp())
+        #self.lengthscale = Param('lengthscale', lengthscale, Logexp())
+        self.lengthscale = Param('lengthscale', lengthscale, LogexpClipped())
         if wrapper != 'none':
-            self.variance = Param('variance', variance, Logexp())
+            self.variance = Param('variance', variance, LogexpClipped())
             self.link_parameter(self.variance)
         if sim == 'pos_dot':
             self.link_parameter(self.lengthscale)
