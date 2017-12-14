@@ -1,5 +1,5 @@
 import numpy as np
-from sk_util import build_input_matrix
+from .sk_util import build_input_matrix
 
 
 class NumpyNoGradsStringKernel(object):

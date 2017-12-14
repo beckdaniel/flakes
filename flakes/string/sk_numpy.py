@@ -1,5 +1,5 @@
 import numpy as np
-from sk_util import build_input_matrix
+from .sk_util import build_input_matrix
 
 
 class NumpyStringKernel(object):
@@ -40,7 +40,7 @@ class NumpyStringKernel(object):
         power = np.ones((maxlen, maxlen))
         tril = np.zeros((maxlen, maxlen))
         i1, i2 = np.indices(power.shape)
-        for k in xrange(maxlen - 1):
+        for k in range(maxlen - 1):
             power[i2-k-1 == i1] = k
             tril[i2-k-1 == i1] = 1.0
         gaps = np.ones((maxlen, maxlen)) * gap
@@ -57,7 +57,7 @@ class NumpyStringKernel(object):
         dKp_dmatch = np.zeros(shape=(order, n, m))
         match_sq = match * match
 
-        for i in xrange(order - 1):
+        for i in range(order - 1):
             aux1 = S * Kp[i]
             aux2 = aux1.dot(D[0:m, 0:m])
             Kpp = match_sq * aux2

@@ -2,7 +2,7 @@ import tensorflow as tf
 import numpy as np
 from tensorflow.python.ops import control_flow_ops as cfops
 from tensorflow.python.ops import tensor_array_ops as taops
-from sk_util import build_input_matrix
+from .sk_util import build_input_matrix
 import sys
 
 

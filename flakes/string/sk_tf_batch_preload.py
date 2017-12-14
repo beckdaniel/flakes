@@ -3,7 +3,7 @@ import numpy as np
 from tensorflow.python.ops import control_flow_ops as cfops
 from tensorflow.python.ops import tensor_array_ops as taops
 from tensorflow.python.ops import functional_ops as fops
-from sk_util import build_input_matrix
+from .sk_util import build_input_matrix
 import sys
 from tensorflow.core.protobuf import config_pb2
 from tensorflow.python.client import timeline

@@ -2,19 +2,18 @@ import tensorflow as tf
 import numpy as np
 from tensorflow.python.ops import control_flow_ops as cfops
 from tensorflow.python.ops import tensor_array_ops as taops
-from sk_tf import TFStringKernel
-from sk_tf_batch_preload import TFBatchPreloadStringKernel
-from sk_tf_batch import TFBatchStringKernel
-from sk_numpy import NumpyStringKernel
-from sk_numpy_nograds import NumpyNoGradsStringKernel
-from sk_naive import NaiveStringKernel
+from .sk_tf import TFStringKernel
+from .sk_tf_batch_preload import TFBatchPreloadStringKernel
+from .sk_tf_batch import TFBatchStringKernel
+from .sk_numpy import NumpyStringKernel
+from .sk_numpy_nograds import NumpyNoGradsStringKernel
+from .sk_naive import NaiveStringKernel
 
 import pyximport; pyximport.install(setup_args={"include_dirs": np.get_include()})
-from sk_cynaive import CythonNaiveStringKernel
+from .sk_cynaive import CythonNaiveStringKernel
 
-from sk_util import build_one_hot
-from sk_util import encode_string
-import line_profiler
+from .sk_util import build_one_hot
+from .sk_util import encode_string
 
 
 class StringKernel(object):
